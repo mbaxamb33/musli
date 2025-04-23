@@ -9,27 +9,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// createRandomDatasource creates a datasource for testing
-func createRandomDatasource(t *testing.T) Datasource {
-	arg := CreateDatasourceParams{
-		SourceType: randomString(8),
-		SourceID: sql.NullInt32{
-			Int32: int32(randomInt(1, 1000)),
-			Valid: true,
-		},
-	}
+// // createRandomDatasource creates a datasource for testing
+// func createRandomDatasource(t *testing.T) Datasource {
+// 	arg := CreateDatasourceParams{
+// 		SourceType: randomString(8),
+// 		SourceID: sql.NullInt32{
+// 			Int32: int32(randomInt(1, 1000)),
+// 			Valid: true,
+// 		},
+// 	}
 
-	datasource, err := testQueries.CreateDatasource(context.Background(), arg)
-	require.NoError(t, err)
-	require.NotEmpty(t, datasource)
+// 	datasource, err := testQueries.CreateDatasource(context.Background(), arg)
+// 	require.NoError(t, err)
+// 	require.NotEmpty(t, datasource)
 
-	require.Equal(t, arg.SourceType, datasource.SourceType)
-	require.Equal(t, arg.SourceID, datasource.SourceID)
-	require.NotZero(t, datasource.DatasourceID)
-	require.NotEmpty(t, datasource.ExtractionTimestamp)
+// 	require.Equal(t, arg.SourceType, datasource.SourceType)
+// 	require.Equal(t, arg.SourceID, datasource.SourceID)
+// 	require.NotZero(t, datasource.DatasourceID)
+// 	require.NotEmpty(t, datasource.ExtractionTimestamp)
 
-	return datasource
-}
+// 	return datasource
+// }
 
 // createRandomCompanyNews creates company news with random values for testing
 func createRandomCompanyNews(t *testing.T) CompanyNews {
