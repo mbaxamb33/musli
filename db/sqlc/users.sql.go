@@ -7,58 +7,29 @@ package db
 
 import (
 	"context"
-	"database/sql"
 )
 
-const countUsers = `-- name: CountUsers :one
-SELECT COUNT(*) FROM users
-`
-
-func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countUsers)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (
-  username,
-  email,
-  password_hash,
-  first_name,
-  last_name
-) VALUES (
-  $1, $2, $3, $4, $5
-) RETURNING user_id, username, email, password_hash, first_name, last_name, created_at, updated_at
+INSERT INTO users (username, email, password_hash)
+VALUES ($1, $2, $3)
+RETURNING user_id, username, email, password_hash, created_at
 `
 
 type CreateUserParams struct {
-	Username     string         `json:"username"`
-	Email        string         `json:"email"`
-	PasswordHash string         `json:"password_hash"`
-	FirstName    sql.NullString `json:"first_name"`
-	LastName     sql.NullString `json:"last_name"`
+	Username     string `json:"username"`
+	Email        string `json:"email"`
+	PasswordHash string `json:"password_hash"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser,
-		arg.Username,
-		arg.Email,
-		arg.PasswordHash,
-		arg.FirstName,
-		arg.LastName,
-	)
+	row := q.db.QueryRowContext(ctx, createUser, arg.Username, arg.Email, arg.PasswordHash)
 	var i User
 	err := row.Scan(
 		&i.UserID,
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.FirstName,
-		&i.LastName,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -73,30 +44,10 @@ func (q *Queries) DeleteUser(ctx context.Context, userID int32) error {
 	return err
 }
 
-const getUser = `-- name: GetUser :one
-SELECT user_id, username, email, password_hash, first_name, last_name, created_at, updated_at FROM users
-WHERE user_id = $1 LIMIT 1
-`
-
-func (q *Queries) GetUser(ctx context.Context, userID int32) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUser, userID)
-	var i User
-	err := row.Scan(
-		&i.UserID,
-		&i.Username,
-		&i.Email,
-		&i.PasswordHash,
-		&i.FirstName,
-		&i.LastName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT user_id, username, email, password_hash, first_name, last_name, created_at, updated_at FROM users
-WHERE email = $1 LIMIT 1
+SELECT user_id, username, email, password_hash, created_at
+FROM users
+WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -107,17 +58,34 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.FirstName,
-		&i.LastName,
 		&i.CreatedAt,
-		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT user_id, username, email, password_hash, created_at
+FROM users
+WHERE user_id = $1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, userID int32) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, userID)
+	var i User
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT user_id, username, email, password_hash, first_name, last_name, created_at, updated_at FROM users
-WHERE username = $1 LIMIT 1
+SELECT user_id, username, email, password_hash, created_at
+FROM users
+WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -128,16 +96,14 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.FirstName,
-		&i.LastName,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT user_id, username, email, password_hash, first_name, last_name, created_at, updated_at FROM users
+SELECT user_id, username, email, password_hash, created_at
+FROM users
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -161,10 +127,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.Username,
 			&i.Email,
 			&i.PasswordHash,
-			&i.FirstName,
-			&i.LastName,
 			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -179,47 +142,27 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 	return items, nil
 }
 
-const updateUser = `-- name: UpdateUser :one
+const updateUserEmail = `-- name: UpdateUserEmail :one
 UPDATE users
-SET
-  username = COALESCE($2, username),
-  email = COALESCE($3, email),
-  password_hash = COALESCE($4, password_hash),
-  first_name = COALESCE($5, first_name),
-  last_name = COALESCE($6, last_name),
-  updated_at = CURRENT_TIMESTAMP
+SET email = $2
 WHERE user_id = $1
-RETURNING user_id, username, email, password_hash, first_name, last_name, created_at, updated_at
+RETURNING user_id, username, email, password_hash, created_at
 `
 
-type UpdateUserParams struct {
-	UserID       int32          `json:"user_id"`
-	Username     string         `json:"username"`
-	Email        string         `json:"email"`
-	PasswordHash string         `json:"password_hash"`
-	FirstName    sql.NullString `json:"first_name"`
-	LastName     sql.NullString `json:"last_name"`
+type UpdateUserEmailParams struct {
+	UserID int32  `json:"user_id"`
+	Email  string `json:"email"`
 }
 
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, updateUser,
-		arg.UserID,
-		arg.Username,
-		arg.Email,
-		arg.PasswordHash,
-		arg.FirstName,
-		arg.LastName,
-	)
+func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserEmail, arg.UserID, arg.Email)
 	var i User
 	err := row.Scan(
 		&i.UserID,
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.FirstName,
-		&i.LastName,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }

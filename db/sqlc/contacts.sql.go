@@ -12,42 +12,51 @@ import (
 
 const createContact = `-- name: CreateContact :one
 INSERT INTO contacts (
-  first_name,
-  last_name,
-  title,
-  email,
-  phone
-) VALUES (
-  $1, $2, $3, $4, $5
-) RETURNING contact_id, first_name, last_name, title, email, phone, created_at, updated_at
+    first_name, last_name, email, phone, linkedin_profile,
+    job_title, company_id, location, bio
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING contact_id, first_name, last_name, email, phone, linkedin_profile,
+          job_title, company_id, location, bio, scrape_timestamp
 `
 
 type CreateContactParams struct {
-	FirstName string         `json:"first_name"`
-	LastName  string         `json:"last_name"`
-	Title     sql.NullString `json:"title"`
-	Email     sql.NullString `json:"email"`
-	Phone     sql.NullString `json:"phone"`
+	FirstName       sql.NullString `json:"first_name"`
+	LastName        sql.NullString `json:"last_name"`
+	Email           sql.NullString `json:"email"`
+	Phone           sql.NullString `json:"phone"`
+	LinkedinProfile sql.NullString `json:"linkedin_profile"`
+	JobTitle        sql.NullString `json:"job_title"`
+	CompanyID       sql.NullInt32  `json:"company_id"`
+	Location        sql.NullString `json:"location"`
+	Bio             sql.NullString `json:"bio"`
 }
 
 func (q *Queries) CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error) {
 	row := q.db.QueryRowContext(ctx, createContact,
 		arg.FirstName,
 		arg.LastName,
-		arg.Title,
 		arg.Email,
 		arg.Phone,
+		arg.LinkedinProfile,
+		arg.JobTitle,
+		arg.CompanyID,
+		arg.Location,
+		arg.Bio,
 	)
 	var i Contact
 	err := row.Scan(
 		&i.ContactID,
 		&i.FirstName,
 		&i.LastName,
-		&i.Title,
 		&i.Email,
 		&i.Phone,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.LinkedinProfile,
+		&i.JobTitle,
+		&i.CompanyID,
+		&i.Location,
+		&i.Bio,
+		&i.ScrapeTimestamp,
 	)
 	return i, err
 }
@@ -62,75 +71,68 @@ func (q *Queries) DeleteContact(ctx context.Context, contactID int32) error {
 	return err
 }
 
-const getContact = `-- name: GetContact :one
-SELECT contact_id, first_name, last_name, title, email, phone, created_at, updated_at FROM contacts
-WHERE contact_id = $1 LIMIT 1
+const getContactByID = `-- name: GetContactByID :one
+SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
+       job_title, company_id, location, bio, scrape_timestamp
+FROM contacts
+WHERE contact_id = $1
 `
 
-func (q *Queries) GetContact(ctx context.Context, contactID int32) (Contact, error) {
-	row := q.db.QueryRowContext(ctx, getContact, contactID)
+func (q *Queries) GetContactByID(ctx context.Context, contactID int32) (Contact, error) {
+	row := q.db.QueryRowContext(ctx, getContactByID, contactID)
 	var i Contact
 	err := row.Scan(
 		&i.ContactID,
 		&i.FirstName,
 		&i.LastName,
-		&i.Title,
 		&i.Email,
 		&i.Phone,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.LinkedinProfile,
+		&i.JobTitle,
+		&i.CompanyID,
+		&i.Location,
+		&i.Bio,
+		&i.ScrapeTimestamp,
 	)
 	return i, err
 }
 
-const getContactsByCompany = `-- name: GetContactsByCompany :many
-SELECT 
-  c.contact_id, c.first_name, c.last_name, c.title, c.email, c.phone, c.created_at, c.updated_at,
-  cc.is_primary
-FROM contacts c
-JOIN company_contacts cc ON c.contact_id = cc.contact_id
-WHERE cc.company_id = $1
-ORDER BY cc.is_primary DESC, c.last_name, c.first_name
+const listContactsByCompany = `-- name: ListContactsByCompany :many
+SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
+       job_title, company_id, location, bio, scrape_timestamp
+FROM contacts
+WHERE company_id = $1
+ORDER BY scrape_timestamp DESC
 LIMIT $2 OFFSET $3
 `
 
-type GetContactsByCompanyParams struct {
-	CompanyID int32 `json:"company_id"`
-	Limit     int32 `json:"limit"`
-	Offset    int32 `json:"offset"`
+type ListContactsByCompanyParams struct {
+	CompanyID sql.NullInt32 `json:"company_id"`
+	Limit     int32         `json:"limit"`
+	Offset    int32         `json:"offset"`
 }
 
-type GetContactsByCompanyRow struct {
-	ContactID int32          `json:"contact_id"`
-	FirstName string         `json:"first_name"`
-	LastName  string         `json:"last_name"`
-	Title     sql.NullString `json:"title"`
-	Email     sql.NullString `json:"email"`
-	Phone     sql.NullString `json:"phone"`
-	CreatedAt sql.NullTime   `json:"created_at"`
-	UpdatedAt sql.NullTime   `json:"updated_at"`
-	IsPrimary sql.NullBool   `json:"is_primary"`
-}
-
-func (q *Queries) GetContactsByCompany(ctx context.Context, arg GetContactsByCompanyParams) ([]GetContactsByCompanyRow, error) {
-	rows, err := q.db.QueryContext(ctx, getContactsByCompany, arg.CompanyID, arg.Limit, arg.Offset)
+func (q *Queries) ListContactsByCompany(ctx context.Context, arg ListContactsByCompanyParams) ([]Contact, error) {
+	rows, err := q.db.QueryContext(ctx, listContactsByCompany, arg.CompanyID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetContactsByCompanyRow
+	var items []Contact
 	for rows.Next() {
-		var i GetContactsByCompanyRow
+		var i Contact
 		if err := rows.Scan(
 			&i.ContactID,
 			&i.FirstName,
 			&i.LastName,
-			&i.Title,
 			&i.Email,
 			&i.Phone,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.IsPrimary,
+			&i.LinkedinProfile,
+			&i.JobTitle,
+			&i.CompanyID,
+			&i.Location,
+			&i.Bio,
+			&i.ScrapeTimestamp,
 		); err != nil {
 			return nil, err
 		}
@@ -145,91 +147,23 @@ func (q *Queries) GetContactsByCompany(ctx context.Context, arg GetContactsByCom
 	return items, nil
 }
 
-const getPrimaryContactForCompany = `-- name: GetPrimaryContactForCompany :one
-SELECT c.contact_id, c.first_name, c.last_name, c.title, c.email, c.phone, c.created_at, c.updated_at 
-FROM contacts c
-JOIN company_contacts cc ON c.contact_id = cc.contact_id
-WHERE cc.company_id = $1 AND cc.is_primary = TRUE
-LIMIT 1
-`
-
-func (q *Queries) GetPrimaryContactForCompany(ctx context.Context, companyID int32) (Contact, error) {
-	row := q.db.QueryRowContext(ctx, getPrimaryContactForCompany, companyID)
-	var i Contact
-	err := row.Scan(
-		&i.ContactID,
-		&i.FirstName,
-		&i.LastName,
-		&i.Title,
-		&i.Email,
-		&i.Phone,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const listContacts = `-- name: ListContacts :many
-SELECT contact_id, first_name, last_name, title, email, phone, created_at, updated_at FROM contacts
-ORDER BY last_name, first_name
-LIMIT $1 OFFSET $2
-`
-
-type ListContactsParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]Contact, error) {
-	rows, err := q.db.QueryContext(ctx, listContacts, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Contact
-	for rows.Next() {
-		var i Contact
-		if err := rows.Scan(
-			&i.ContactID,
-			&i.FirstName,
-			&i.LastName,
-			&i.Title,
-			&i.Email,
-			&i.Phone,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const searchContacts = `-- name: SearchContacts :many
-SELECT contact_id, first_name, last_name, title, email, phone, created_at, updated_at FROM contacts
-WHERE 
-  first_name ILIKE '%' || $1 || '%' OR 
-  last_name ILIKE '%' || $1 || '%' OR
-  email ILIKE '%' || $1 || '%'
-ORDER BY last_name, first_name
+const searchContactsByName = `-- name: SearchContactsByName :many
+SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
+       job_title, company_id, location, bio, scrape_timestamp
+FROM contacts
+WHERE LOWER(first_name) LIKE LOWER($1) OR LOWER(last_name) LIKE LOWER($1)
+ORDER BY scrape_timestamp DESC
 LIMIT $2 OFFSET $3
 `
 
-type SearchContactsParams struct {
-	Column1 sql.NullString `json:"column_1"`
-	Limit   int32          `json:"limit"`
-	Offset  int32          `json:"offset"`
+type SearchContactsByNameParams struct {
+	Lower  string `json:"lower"`
+	Limit  int32  `json:"limit"`
+	Offset int32  `json:"offset"`
 }
 
-func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) ([]Contact, error) {
-	rows, err := q.db.QueryContext(ctx, searchContacts, arg.Column1, arg.Limit, arg.Offset)
+func (q *Queries) SearchContactsByName(ctx context.Context, arg SearchContactsByNameParams) ([]Contact, error) {
+	rows, err := q.db.QueryContext(ctx, searchContactsByName, arg.Lower, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -241,11 +175,14 @@ func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) 
 			&i.ContactID,
 			&i.FirstName,
 			&i.LastName,
-			&i.Title,
 			&i.Email,
 			&i.Phone,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.LinkedinProfile,
+			&i.JobTitle,
+			&i.CompanyID,
+			&i.Location,
+			&i.Bio,
+			&i.ScrapeTimestamp,
 		); err != nil {
 			return nil, err
 		}
@@ -262,24 +199,32 @@ func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) 
 
 const updateContact = `-- name: UpdateContact :one
 UPDATE contacts
-SET
-  first_name = COALESCE($2, first_name),
-  last_name = COALESCE($3, last_name),
-  title = COALESCE($4, title),
-  email = COALESCE($5, email),
-  phone = COALESCE($6, phone),
-  updated_at = CURRENT_TIMESTAMP
+SET first_name = $2,
+    last_name = $3,
+    email = $4,
+    phone = $5,
+    linkedin_profile = $6,
+    job_title = $7,
+    company_id = $8,
+    location = $9,
+    bio = $10,
+    scrape_timestamp = CURRENT_TIMESTAMP
 WHERE contact_id = $1
-RETURNING contact_id, first_name, last_name, title, email, phone, created_at, updated_at
+RETURNING contact_id, first_name, last_name, email, phone, linkedin_profile,
+          job_title, company_id, location, bio, scrape_timestamp
 `
 
 type UpdateContactParams struct {
-	ContactID int32          `json:"contact_id"`
-	FirstName string         `json:"first_name"`
-	LastName  string         `json:"last_name"`
-	Title     sql.NullString `json:"title"`
-	Email     sql.NullString `json:"email"`
-	Phone     sql.NullString `json:"phone"`
+	ContactID       int32          `json:"contact_id"`
+	FirstName       sql.NullString `json:"first_name"`
+	LastName        sql.NullString `json:"last_name"`
+	Email           sql.NullString `json:"email"`
+	Phone           sql.NullString `json:"phone"`
+	LinkedinProfile sql.NullString `json:"linkedin_profile"`
+	JobTitle        sql.NullString `json:"job_title"`
+	CompanyID       sql.NullInt32  `json:"company_id"`
+	Location        sql.NullString `json:"location"`
+	Bio             sql.NullString `json:"bio"`
 }
 
 func (q *Queries) UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error) {
@@ -287,20 +232,27 @@ func (q *Queries) UpdateContact(ctx context.Context, arg UpdateContactParams) (C
 		arg.ContactID,
 		arg.FirstName,
 		arg.LastName,
-		arg.Title,
 		arg.Email,
 		arg.Phone,
+		arg.LinkedinProfile,
+		arg.JobTitle,
+		arg.CompanyID,
+		arg.Location,
+		arg.Bio,
 	)
 	var i Contact
 	err := row.Scan(
 		&i.ContactID,
 		&i.FirstName,
 		&i.LastName,
-		&i.Title,
 		&i.Email,
 		&i.Phone,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.LinkedinProfile,
+		&i.JobTitle,
+		&i.CompanyID,
+		&i.Location,
+		&i.Bio,
+		&i.ScrapeTimestamp,
 	)
 	return i, err
 }

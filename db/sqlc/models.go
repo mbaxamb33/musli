@@ -8,169 +8,116 @@ import (
 	"database/sql"
 )
 
-type ApproachStrategy struct {
-	StrategyID          int32          `json:"strategy_id"`
-	Name                string         `json:"name"`
-	Description         sql.NullString `json:"description"`
-	RecommendedScoreMin sql.NullString `json:"recommended_score_min"`
-	RecommendedScoreMax sql.NullString `json:"recommended_score_max"`
-	CreatedAt           sql.NullTime   `json:"created_at"`
-	UpdatedAt           sql.NullTime   `json:"updated_at"`
-}
-
 type Company struct {
-	CompanyID   int32          `json:"company_id"`
-	Name        string         `json:"name"`
-	Industry    sql.NullString `json:"industry"`
-	Size        sql.NullString `json:"size"`
-	Location    sql.NullString `json:"location"`
-	Website     sql.NullString `json:"website"`
-	Description sql.NullString `json:"description"`
-	CreatedAt   sql.NullTime   `json:"created_at"`
-	UpdatedAt   sql.NullTime   `json:"updated_at"`
+	CompanyID            int32          `json:"company_id"`
+	Name                 string         `json:"name"`
+	Website              sql.NullString `json:"website"`
+	Industry             sql.NullString `json:"industry"`
+	Description          sql.NullString `json:"description"`
+	HeadquartersLocation sql.NullString `json:"headquarters_location"`
+	FoundedYear          sql.NullInt32  `json:"founded_year"`
+	IsPublic             sql.NullBool   `json:"is_public"`
+	TickerSymbol         sql.NullString `json:"ticker_symbol"`
+	ScrapeTimestamp      sql.NullTime   `json:"scrape_timestamp"`
 }
 
-type CompanyContact struct {
-	CompanyContactID int32        `json:"company_contact_id"`
-	CompanyID        int32        `json:"company_id"`
-	ContactID        int32        `json:"contact_id"`
-	IsPrimary        sql.NullBool `json:"is_primary"`
-	CreatedAt        sql.NullTime `json:"created_at"`
-	UpdatedAt        sql.NullTime `json:"updated_at"`
+type CompanyNews struct {
+	NewsID          int32          `json:"news_id"`
+	CompanyID       sql.NullInt32  `json:"company_id"`
+	Title           string         `json:"title"`
+	PublicationDate sql.NullTime   `json:"publication_date"`
+	Source          sql.NullString `json:"source"`
+	Url             sql.NullString `json:"url"`
+	Summary         sql.NullString `json:"summary"`
+	Sentiment       sql.NullString `json:"sentiment"`
+	DatasourceID    sql.NullInt32  `json:"datasource_id"`
 }
 
 type Contact struct {
-	ContactID int32          `json:"contact_id"`
-	FirstName string         `json:"first_name"`
-	LastName  string         `json:"last_name"`
-	Title     sql.NullString `json:"title"`
-	Email     sql.NullString `json:"email"`
-	Phone     sql.NullString `json:"phone"`
-	CreatedAt sql.NullTime   `json:"created_at"`
-	UpdatedAt sql.NullTime   `json:"updated_at"`
+	ContactID       int32          `json:"contact_id"`
+	FirstName       sql.NullString `json:"first_name"`
+	LastName        sql.NullString `json:"last_name"`
+	Email           sql.NullString `json:"email"`
+	Phone           sql.NullString `json:"phone"`
+	LinkedinProfile sql.NullString `json:"linkedin_profile"`
+	JobTitle        sql.NullString `json:"job_title"`
+	CompanyID       sql.NullInt32  `json:"company_id"`
+	Location        sql.NullString `json:"location"`
+	Bio             sql.NullString `json:"bio"`
+	ScrapeTimestamp sql.NullTime   `json:"scrape_timestamp"`
 }
 
-type DataSource struct {
-	SourceID    int32          `json:"source_id"`
-	Name        string         `json:"name"`
-	UrlPattern  sql.NullString `json:"url_pattern"`
-	ApiEndpoint sql.NullString `json:"api_endpoint"`
-	ApiKey      sql.NullString `json:"api_key"`
-	IsActive    sql.NullBool   `json:"is_active"`
-	CreatedAt   sql.NullTime   `json:"created_at"`
-	UpdatedAt   sql.NullTime   `json:"updated_at"`
+type ContactNews struct {
+	MentionID       int32          `json:"mention_id"`
+	ContactID       sql.NullInt32  `json:"contact_id"`
+	Title           string         `json:"title"`
+	PublicationDate sql.NullTime   `json:"publication_date"`
+	Source          sql.NullString `json:"source"`
+	Url             sql.NullString `json:"url"`
+	Summary         sql.NullString `json:"summary"`
+	DatasourceID    sql.NullInt32  `json:"datasource_id"`
 }
 
-type MatchingCriterium struct {
+type Datasource struct {
+	DatasourceID        int32         `json:"datasource_id"`
+	SourceType          string        `json:"source_type"`
+	SourceID            sql.NullInt32 `json:"source_id"`
+	ExtractionTimestamp sql.NullTime  `json:"extraction_timestamp"`
+}
+
+type MatchingScoreCriterium struct {
 	CriteriaID  int32          `json:"criteria_id"`
 	Name        string         `json:"name"`
 	Description sql.NullString `json:"description"`
-	Weight      sql.NullString `json:"weight"`
-	IsActive    sql.NullBool   `json:"is_active"`
-	CreatedAt   sql.NullTime   `json:"created_at"`
-	UpdatedAt   sql.NullTime   `json:"updated_at"`
+	Weight      string         `json:"weight"`
 }
 
-type MatchingScoresDetail struct {
-	ScoreDetailID    int32        `json:"score_detail_id"`
-	ProjectCompanyID int32        `json:"project_company_id"`
-	CriteriaID       int32        `json:"criteria_id"`
-	Score            string       `json:"score"`
-	CreatedAt        sql.NullTime `json:"created_at"`
-	UpdatedAt        sql.NullTime `json:"updated_at"`
-}
-
-type ProcessedCompanyDatum struct {
-	DataID          int32          `json:"data_id"`
-	CompanyID       int32          `json:"company_id"`
-	DataType        string         `json:"data_type"`
-	DataKey         string         `json:"data_key"`
-	DataValue       sql.NullString `json:"data_value"`
+type Paragraph struct {
+	ParagraphID     int32          `json:"paragraph_id"`
+	DatasourceID    sql.NullInt32  `json:"datasource_id"`
+	Content         string         `json:"content"`
+	MainIdea        sql.NullString `json:"main_idea"`
+	Classification  sql.NullString `json:"classification"`
 	ConfidenceScore sql.NullString `json:"confidence_score"`
-	SourceID        sql.NullInt32  `json:"source_id"`
-	CreatedAt       sql.NullTime   `json:"created_at"`
-	UpdatedAt       sql.NullTime   `json:"updated_at"`
 }
 
 type Project struct {
-	ProjectID   int32          `json:"project_id"`
-	UserID      int32          `json:"user_id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	StartDate   sql.NullTime   `json:"start_date"`
-	EndDate     sql.NullTime   `json:"end_date"`
-	Status      sql.NullString `json:"status"`
-	CreatedAt   sql.NullTime   `json:"created_at"`
-	UpdatedAt   sql.NullTime   `json:"updated_at"`
+	ProjectID     int32          `json:"project_id"`
+	UserID        sql.NullInt32  `json:"user_id"`
+	ProjectName   string         `json:"project_name"`
+	Description   sql.NullString `json:"description"`
+	CreatedAt     sql.NullTime   `json:"created_at"`
+	LastUpdatedAt sql.NullTime   `json:"last_updated_at"`
 }
 
 type ProjectCompany struct {
-	ProjectCompanyID   int32          `json:"project_company_id"`
-	ProjectID          int32          `json:"project_id"`
-	CompanyID          int32          `json:"company_id"`
-	MatchingScore      sql.NullString `json:"matching_score"`
-	ApproachStrategyID sql.NullInt32  `json:"approach_strategy_id"`
-	Status             sql.NullString `json:"status"`
-	CreatedAt          sql.NullTime   `json:"created_at"`
-	UpdatedAt          sql.NullTime   `json:"updated_at"`
+	ProjectID        int32          `json:"project_id"`
+	CompanyID        int32          `json:"company_id"`
+	AssociationNotes sql.NullString `json:"association_notes"`
+	MatchingScore    sql.NullString `json:"matching_score"`
+	ApproachStrategy sql.NullString `json:"approach_strategy"`
 }
 
-type ProjectProcessing struct {
-	ProcessingID   int32          `json:"processing_id"`
-	ProjectID      int32          `json:"project_id"`
-	ProcessingType string         `json:"processing_type"`
-	Description    sql.NullString `json:"description"`
-	Status         sql.NullString `json:"status"`
-	CreatedAt      sql.NullTime   `json:"created_at"`
-	UpdatedAt      sql.NullTime   `json:"updated_at"`
+type ProjectContact struct {
+	ProjectID        int32          `json:"project_id"`
+	ContactID        int32          `json:"contact_id"`
+	AssociationNotes sql.NullString `json:"association_notes"`
 }
 
-type ProjectResource struct {
-	ProjectResourceID int32          `json:"project_resource_id"`
-	ProjectID         int32          `json:"project_id"`
-	ResourceID        int32          `json:"resource_id"`
-	Quantity          string         `json:"quantity"`
-	Notes             sql.NullString `json:"notes"`
-	CreatedAt         sql.NullTime   `json:"created_at"`
-	UpdatedAt         sql.NullTime   `json:"updated_at"`
-}
-
-type Resource struct {
-	ResourceID  int32          `json:"resource_id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	CategoryID  sql.NullInt32  `json:"category_id"`
-	Unit        sql.NullString `json:"unit"`
-	CostPerUnit sql.NullString `json:"cost_per_unit"`
-	CreatedAt   sql.NullTime   `json:"created_at"`
-	UpdatedAt   sql.NullTime   `json:"updated_at"`
-}
-
-type ResourceCategory struct {
-	CategoryID  int32          `json:"category_id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	CreatedAt   sql.NullTime   `json:"created_at"`
-	UpdatedAt   sql.NullTime   `json:"updated_at"`
+type ProjectFile struct {
+	FileID     int32         `json:"file_id"`
+	ProjectID  sql.NullInt32 `json:"project_id"`
+	FileName   string        `json:"file_name"`
+	FileType   string        `json:"file_type"`
+	FilePath   string        `json:"file_path"`
+	UploadedAt sql.NullTime  `json:"uploaded_at"`
+	FileSize   sql.NullInt32 `json:"file_size"`
 }
 
 type User struct {
-	UserID       int32          `json:"user_id"`
-	Username     string         `json:"username"`
-	Email        string         `json:"email"`
-	PasswordHash string         `json:"password_hash"`
-	FirstName    sql.NullString `json:"first_name"`
-	LastName     sql.NullString `json:"last_name"`
-	CreatedAt    sql.NullTime   `json:"created_at"`
-	UpdatedAt    sql.NullTime   `json:"updated_at"`
-}
-
-type WebScrapeDatum struct {
-	ScrapeID    int32          `json:"scrape_id"`
-	CompanyID   int32          `json:"company_id"`
-	SourceUrl   string         `json:"source_url"`
-	DataType    string         `json:"data_type"`
-	Content     sql.NullString `json:"content"`
-	ScrapeDate  sql.NullTime   `json:"scrape_date"`
-	IsProcessed sql.NullBool   `json:"is_processed"`
+	UserID       int32        `json:"user_id"`
+	Username     string       `json:"username"`
+	Email        string       `json:"email"`
+	PasswordHash string       `json:"password_hash"`
+	CreatedAt    sql.NullTime `json:"created_at"`
 }

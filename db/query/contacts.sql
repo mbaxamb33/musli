@@ -1,61 +1,50 @@
 -- name: CreateContact :one
 INSERT INTO contacts (
-  first_name,
-  last_name,
-  title,
-  email,
-  phone
-) VALUES (
-  $1, $2, $3, $4, $5
-) RETURNING *;
+    first_name, last_name, email, phone, linkedin_profile,
+    job_title, company_id, location, bio
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING contact_id, first_name, last_name, email, phone, linkedin_profile,
+          job_title, company_id, location, bio, scrape_timestamp;
 
--- name: GetContact :one
-SELECT * FROM contacts
-WHERE contact_id = $1 LIMIT 1;
+-- name: GetContactByID :one
+SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
+       job_title, company_id, location, bio, scrape_timestamp
+FROM contacts
+WHERE contact_id = $1;
 
--- name: ListContacts :many
-SELECT * FROM contacts
-ORDER BY last_name, first_name
-LIMIT $1 OFFSET $2;
+-- name: ListContactsByCompany :many
+SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
+       job_title, company_id, location, bio, scrape_timestamp
+FROM contacts
+WHERE company_id = $1
+ORDER BY scrape_timestamp DESC
+LIMIT $2 OFFSET $3;
+
+-- name: SearchContactsByName :many
+SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
+       job_title, company_id, location, bio, scrape_timestamp
+FROM contacts
+WHERE LOWER(first_name) LIKE LOWER($1) OR LOWER(last_name) LIKE LOWER($1)
+ORDER BY scrape_timestamp DESC
+LIMIT $2 OFFSET $3;
 
 -- name: UpdateContact :one
 UPDATE contacts
-SET
-  first_name = COALESCE($2, first_name),
-  last_name = COALESCE($3, last_name),
-  title = COALESCE($4, title),
-  email = COALESCE($5, email),
-  phone = COALESCE($6, phone),
-  updated_at = CURRENT_TIMESTAMP
+SET first_name = $2,
+    last_name = $3,
+    email = $4,
+    phone = $5,
+    linkedin_profile = $6,
+    job_title = $7,
+    company_id = $8,
+    location = $9,
+    bio = $10,
+    scrape_timestamp = CURRENT_TIMESTAMP
 WHERE contact_id = $1
-RETURNING *;
+RETURNING contact_id, first_name, last_name, email, phone, linkedin_profile,
+          job_title, company_id, location, bio, scrape_timestamp;
 
 -- name: DeleteContact :exec
 DELETE FROM contacts
 WHERE contact_id = $1;
-
--- name: SearchContacts :many
-SELECT * FROM contacts
-WHERE 
-  first_name ILIKE '%' || $1 || '%' OR 
-  last_name ILIKE '%' || $1 || '%' OR
-  email ILIKE '%' || $1 || '%'
-ORDER BY last_name, first_name
-LIMIT $2 OFFSET $3;
-
--- name: GetContactsByCompany :many
-SELECT 
-  c.*,
-  cc.is_primary
-FROM contacts c
-JOIN company_contacts cc ON c.contact_id = cc.contact_id
-WHERE cc.company_id = $1
-ORDER BY cc.is_primary DESC, c.last_name, c.first_name
-LIMIT $2 OFFSET $3;
-
--- name: GetPrimaryContactForCompany :one
-SELECT c.* 
-FROM contacts c
-JOIN company_contacts cc ON c.contact_id = cc.contact_id
-WHERE cc.company_id = $1 AND cc.is_primary = TRUE
-LIMIT 1;
