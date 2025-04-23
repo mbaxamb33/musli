@@ -33,6 +33,17 @@ type CompanyNews struct {
 	DatasourceID    sql.NullInt32  `json:"datasource_id"`
 }
 
+type CompanyWebsite struct {
+	WebsiteID           int32          `json:"website_id"`
+	CompanyID           int32          `json:"company_id"`
+	BaseUrl             string         `json:"base_url"`
+	SiteTitle           sql.NullString `json:"site_title"`
+	LastScrapedAt       sql.NullTime   `json:"last_scraped_at"`
+	ScrapeFrequencyDays sql.NullInt32  `json:"scrape_frequency_days"`
+	IsActive            sql.NullBool   `json:"is_active"`
+	DatasourceID        sql.NullInt32  `json:"datasource_id"`
+}
+
 type Contact struct {
 	ContactID       int32          `json:"contact_id"`
 	FirstName       sql.NullString `json:"first_name"`
@@ -120,4 +131,17 @@ type User struct {
 	Email        string       `json:"email"`
 	PasswordHash string       `json:"password_hash"`
 	CreatedAt    sql.NullTime `json:"created_at"`
+}
+
+type WebsitePage struct {
+	PageID          int32          `json:"page_id"`
+	WebsiteID       int32          `json:"website_id"`
+	Url             string         `json:"url"`
+	Path            string         `json:"path"`
+	Title           sql.NullString `json:"title"`
+	ParentPageID    sql.NullInt32  `json:"parent_page_id"`
+	Depth           int32          `json:"depth"`
+	LastExtractedAt sql.NullTime   `json:"last_extracted_at"`
+	ExtractStatus   sql.NullString `json:"extract_status"`
+	DatasourceID    sql.NullInt32  `json:"datasource_id"`
 }
