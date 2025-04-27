@@ -12,25 +12,34 @@ import (
 
 const createDatasource = `-- name: CreateDatasource :one
 INSERT INTO datasources (
-    source_type, source_id
+    source_type, link, file_data, file_name
 )
-VALUES ($1, $2)
-RETURNING datasource_id, source_type, source_id, extraction_timestamp
+VALUES ($1, $2, $3, $4)
+RETURNING datasource_id, source_type, link, file_data, file_name, created_at
 `
 
 type CreateDatasourceParams struct {
-	SourceType string        `json:"source_type"`
-	SourceID   sql.NullInt32 `json:"source_id"`
+	SourceType DatasourceType `json:"source_type"`
+	Link       sql.NullString `json:"link"`
+	FileData   []byte         `json:"file_data"`
+	FileName   sql.NullString `json:"file_name"`
 }
 
 func (q *Queries) CreateDatasource(ctx context.Context, arg CreateDatasourceParams) (Datasource, error) {
-	row := q.db.QueryRowContext(ctx, createDatasource, arg.SourceType, arg.SourceID)
+	row := q.db.QueryRowContext(ctx, createDatasource,
+		arg.SourceType,
+		arg.Link,
+		arg.FileData,
+		arg.FileName,
+	)
 	var i Datasource
 	err := row.Scan(
 		&i.DatasourceID,
 		&i.SourceType,
-		&i.SourceID,
-		&i.ExtractionTimestamp,
+		&i.Link,
+		&i.FileData,
+		&i.FileName,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -46,27 +55,36 @@ func (q *Queries) DeleteDatasource(ctx context.Context, datasourceID int32) erro
 }
 
 const getDatasourceByID = `-- name: GetDatasourceByID :one
-SELECT datasource_id, source_type, source_id, extraction_timestamp
+SELECT datasource_id, source_type, link, file_name, created_at
 FROM datasources
 WHERE datasource_id = $1
 `
 
-func (q *Queries) GetDatasourceByID(ctx context.Context, datasourceID int32) (Datasource, error) {
+type GetDatasourceByIDRow struct {
+	DatasourceID int32          `json:"datasource_id"`
+	SourceType   DatasourceType `json:"source_type"`
+	Link         sql.NullString `json:"link"`
+	FileName     sql.NullString `json:"file_name"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) GetDatasourceByID(ctx context.Context, datasourceID int32) (GetDatasourceByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getDatasourceByID, datasourceID)
-	var i Datasource
+	var i GetDatasourceByIDRow
 	err := row.Scan(
 		&i.DatasourceID,
 		&i.SourceType,
-		&i.SourceID,
-		&i.ExtractionTimestamp,
+		&i.Link,
+		&i.FileName,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listDatasources = `-- name: ListDatasources :many
-SELECT datasource_id, source_type, source_id, extraction_timestamp
+SELECT datasource_id, source_type, link, file_name, created_at
 FROM datasources
-ORDER BY extraction_timestamp DESC
+ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -75,20 +93,29 @@ type ListDatasourcesParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]Datasource, error) {
+type ListDatasourcesRow struct {
+	DatasourceID int32          `json:"datasource_id"`
+	SourceType   DatasourceType `json:"source_type"`
+	Link         sql.NullString `json:"link"`
+	FileName     sql.NullString `json:"file_name"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]ListDatasourcesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listDatasources, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Datasource
+	var items []ListDatasourcesRow
 	for rows.Next() {
-		var i Datasource
+		var i ListDatasourcesRow
 		if err := rows.Scan(
 			&i.DatasourceID,
 			&i.SourceType,
-			&i.SourceID,
-			&i.ExtractionTimestamp,
+			&i.Link,
+			&i.FileName,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -104,33 +131,42 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 }
 
 const listDatasourcesByType = `-- name: ListDatasourcesByType :many
-SELECT datasource_id, source_type, source_id, extraction_timestamp
+SELECT datasource_id, source_type, link, file_name, created_at
 FROM datasources
 WHERE source_type = $1
-ORDER BY extraction_timestamp DESC
+ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListDatasourcesByTypeParams struct {
-	SourceType string `json:"source_type"`
-	Limit      int32  `json:"limit"`
-	Offset     int32  `json:"offset"`
+	SourceType DatasourceType `json:"source_type"`
+	Limit      int32          `json:"limit"`
+	Offset     int32          `json:"offset"`
 }
 
-func (q *Queries) ListDatasourcesByType(ctx context.Context, arg ListDatasourcesByTypeParams) ([]Datasource, error) {
+type ListDatasourcesByTypeRow struct {
+	DatasourceID int32          `json:"datasource_id"`
+	SourceType   DatasourceType `json:"source_type"`
+	Link         sql.NullString `json:"link"`
+	FileName     sql.NullString `json:"file_name"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) ListDatasourcesByType(ctx context.Context, arg ListDatasourcesByTypeParams) ([]ListDatasourcesByTypeRow, error) {
 	rows, err := q.db.QueryContext(ctx, listDatasourcesByType, arg.SourceType, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Datasource
+	var items []ListDatasourcesByTypeRow
 	for rows.Next() {
-		var i Datasource
+		var i ListDatasourcesByTypeRow
 		if err := rows.Scan(
 			&i.DatasourceID,
 			&i.SourceType,
-			&i.SourceID,
-			&i.ExtractionTimestamp,
+			&i.Link,
+			&i.FileName,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

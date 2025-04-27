@@ -1,45 +1,42 @@
 -- name: CreateCompany :one
 INSERT INTO companies (
-    name, website, industry, description,
-    headquarters_location, founded_year, is_public, ticker_symbol
+    user_id, company_name, industry, website, address, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING company_id, name, website, industry, description,
-          headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp;
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING company_id, user_id, company_name, industry, website, address, description, created_at;
 
 -- name: GetCompanyByID :one
-SELECT company_id, name, website, industry, description,
-       headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
 FROM companies
 WHERE company_id = $1;
 
--- name: GetCompanyByName :one
-SELECT company_id, name, website, industry, description,
-       headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+-- name: GetCompaniesByUserID :many
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
 FROM companies
-WHERE name = $1;
+WHERE user_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: GetCompanyByName :one
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
+FROM companies
+WHERE company_name = $1;
 
 -- name: ListCompanies :many
-SELECT company_id, name, website, industry, description,
-       headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
 FROM companies
-ORDER BY scrape_timestamp DESC
+ORDER BY company_name ASC
 LIMIT $1 OFFSET $2;
 
 -- name: UpdateCompany :one
 UPDATE companies
-SET name = $2,
-    website = $3,
-    industry = $4,
-    description = $5,
-    headquarters_location = $6,
-    founded_year = $7,
-    is_public = $8,
-    ticker_symbol = $9,
-    scrape_timestamp = CURRENT_TIMESTAMP
+SET company_name = $2,
+    industry = $3,
+    website = $4,
+    address = $5,
+    description = $6
 WHERE company_id = $1
-RETURNING company_id, name, website, industry, description,
-          headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp;
+RETURNING company_id, user_id, company_name, industry, website, address, description, created_at;
 
 -- name: DeleteCompany :exec
 DELETE FROM companies

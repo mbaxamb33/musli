@@ -11,27 +11,29 @@ import (
 )
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (user_id, project_name, description)
+INSERT INTO projects (
+    user_id, project_name, main_idea
+)
 VALUES ($1, $2, $3)
-RETURNING project_id, user_id, project_name, description, created_at, last_updated_at
+RETURNING project_id, user_id, project_name, main_idea, created_at, updated_at
 `
 
 type CreateProjectParams struct {
-	UserID      sql.NullInt32  `json:"user_id"`
+	UserID      int32          `json:"user_id"`
 	ProjectName string         `json:"project_name"`
-	Description sql.NullString `json:"description"`
+	MainIdea    sql.NullString `json:"main_idea"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, createProject, arg.UserID, arg.ProjectName, arg.Description)
+	row := q.db.QueryRowContext(ctx, createProject, arg.UserID, arg.ProjectName, arg.MainIdea)
 	var i Project
 	err := row.Scan(
 		&i.ProjectID,
 		&i.UserID,
 		&i.ProjectName,
-		&i.Description,
+		&i.MainIdea,
 		&i.CreatedAt,
-		&i.LastUpdatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -47,7 +49,7 @@ func (q *Queries) DeleteProject(ctx context.Context, projectID int32) error {
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT project_id, user_id, project_name, description, created_at, last_updated_at
+SELECT project_id, user_id, project_name, main_idea, created_at, updated_at
 FROM projects
 WHERE project_id = $1
 `
@@ -59,29 +61,29 @@ func (q *Queries) GetProjectByID(ctx context.Context, projectID int32) (Project,
 		&i.ProjectID,
 		&i.UserID,
 		&i.ProjectName,
-		&i.Description,
+		&i.MainIdea,
 		&i.CreatedAt,
-		&i.LastUpdatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const listProjectsByUser = `-- name: ListProjectsByUser :many
-SELECT project_id, user_id, project_name, description, created_at, last_updated_at
+const listProjectsByUserID = `-- name: ListProjectsByUserID :many
+SELECT project_id, user_id, project_name, main_idea, created_at, updated_at
 FROM projects
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
-type ListProjectsByUserParams struct {
-	UserID sql.NullInt32 `json:"user_id"`
-	Limit  int32         `json:"limit"`
-	Offset int32         `json:"offset"`
+type ListProjectsByUserIDParams struct {
+	UserID int32 `json:"user_id"`
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListProjectsByUser(ctx context.Context, arg ListProjectsByUserParams) ([]Project, error) {
-	rows, err := q.db.QueryContext(ctx, listProjectsByUser, arg.UserID, arg.Limit, arg.Offset)
+func (q *Queries) ListProjectsByUserID(ctx context.Context, arg ListProjectsByUserIDParams) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectsByUserID, arg.UserID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +95,59 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, arg ListProjectsByUser
 			&i.ProjectID,
 			&i.UserID,
 			&i.ProjectName,
-			&i.Description,
+			&i.MainIdea,
 			&i.CreatedAt,
-			&i.LastUpdatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchProjectsByName = `-- name: SearchProjectsByName :many
+SELECT project_id, user_id, project_name, main_idea, created_at, updated_at
+FROM projects
+WHERE user_id = $1 AND project_name ILIKE '%' || $2 || '%'
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type SearchProjectsByNameParams struct {
+	UserID  int32          `json:"user_id"`
+	Column2 sql.NullString `json:"column_2"`
+	Limit   int32          `json:"limit"`
+	Offset  int32          `json:"offset"`
+}
+
+func (q *Queries) SearchProjectsByName(ctx context.Context, arg SearchProjectsByNameParams) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, searchProjectsByName,
+		arg.UserID,
+		arg.Column2,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.UserID,
+			&i.ProjectName,
+			&i.MainIdea,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -113,28 +165,28 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, arg ListProjectsByUser
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
 SET project_name = $2,
-    description = $3,
-    last_updated_at = CURRENT_TIMESTAMP
+    main_idea = $3,
+    updated_at = CURRENT_TIMESTAMP
 WHERE project_id = $1
-RETURNING project_id, user_id, project_name, description, created_at, last_updated_at
+RETURNING project_id, user_id, project_name, main_idea, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
 	ProjectID   int32          `json:"project_id"`
 	ProjectName string         `json:"project_name"`
-	Description sql.NullString `json:"description"`
+	MainIdea    sql.NullString `json:"main_idea"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, updateProject, arg.ProjectID, arg.ProjectName, arg.Description)
+	row := q.db.QueryRowContext(ctx, updateProject, arg.ProjectID, arg.ProjectName, arg.MainIdea)
 	var i Project
 	err := row.Scan(
 		&i.ProjectID,
 		&i.UserID,
 		&i.ProjectName,
-		&i.Description,
+		&i.MainIdea,
 		&i.CreatedAt,
-		&i.LastUpdatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

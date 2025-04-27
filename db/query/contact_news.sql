@@ -1,46 +1,29 @@
--- name: CreateContactNews :one
+-- name: CreateContactNewsItem :one
 INSERT INTO contact_news (
-    contact_id, title, publication_date, source, url, summary, datasource_id
+    contact_id, title, content, datasource_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING mention_id, contact_id, title, publication_date, source, url, summary, datasource_id;
+VALUES ($1, $2, $3, $4)
+RETURNING contact_news_id, contact_id, title, content, datasource_id, created_at;
 
--- name: GetContactNewsByID :one
-SELECT mention_id, contact_id, title, publication_date, source, url, summary, datasource_id
+-- name: GetContactNewsItemByID :one
+SELECT contact_news_id, contact_id, title, content, datasource_id, created_at
 FROM contact_news
-WHERE mention_id = $1;
+WHERE contact_news_id = $1;
 
--- name: ListContactNewsByContact :many
-SELECT mention_id, contact_id, title, publication_date, source, url, summary, datasource_id
+-- name: ListNewsItemsByContact :many
+SELECT contact_news_id, contact_id, title, content, datasource_id, created_at
 FROM contact_news
 WHERE contact_id = $1
-ORDER BY publication_date DESC
+ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
--- name: ListContactNewsByDatasource :many
-SELECT mention_id, contact_id, title, publication_date, source, url, summary, datasource_id
-FROM contact_news
-WHERE datasource_id = $1
-ORDER BY publication_date DESC
-LIMIT $2 OFFSET $3;
-
--- name: ListContactNewsBySource :many
-SELECT mention_id, contact_id, title, publication_date, source, url, summary, datasource_id
-FROM contact_news
-WHERE source = $1
-ORDER BY publication_date DESC
-LIMIT $2 OFFSET $3;
-
--- name: UpdateContactNews :one
+-- name: UpdateContactNewsItem :one
 UPDATE contact_news
 SET title = $2,
-    publication_date = $3,
-    source = $4,
-    url = $5,
-    summary = $6
-WHERE mention_id = $1
-RETURNING mention_id, contact_id, title, publication_date, source, url, summary, datasource_id;
+    content = $3
+WHERE contact_news_id = $1
+RETURNING contact_news_id, contact_id, title, content, datasource_id, created_at;
 
--- name: DeleteContactNews :exec
+-- name: DeleteContactNewsItem :exec
 DELETE FROM contact_news
-WHERE mention_id = $1;
+WHERE contact_news_id = $1;

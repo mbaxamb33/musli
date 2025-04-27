@@ -6,142 +6,313 @@ package db
 
 import (
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
+	"time"
 )
 
+type DatasourceType string
+
+const (
+	DatasourceTypeMp3          DatasourceType = "mp3"
+	DatasourceTypeWebsite      DatasourceType = "website"
+	DatasourceTypeWordDocument DatasourceType = "word_document"
+	DatasourceTypePdf          DatasourceType = "pdf"
+	DatasourceTypeExcel        DatasourceType = "excel"
+	DatasourceTypePowerpoint   DatasourceType = "powerpoint"
+	DatasourceTypePlainText    DatasourceType = "plain_text"
+)
+
+func (e *DatasourceType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DatasourceType(s)
+	case string:
+		*e = DatasourceType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DatasourceType: %T", src)
+	}
+	return nil
+}
+
+type NullDatasourceType struct {
+	DatasourceType DatasourceType `json:"datasource_type"`
+	Valid          bool           `json:"valid"` // Valid is true if DatasourceType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDatasourceType) Scan(value interface{}) error {
+	if value == nil {
+		ns.DatasourceType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DatasourceType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDatasourceType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DatasourceType), nil
+}
+
+type InputType string
+
+const (
+	InputTypePersonalInput InputType = "personal_input"
+	InputTypeMeetingInput  InputType = "meeting_input"
+	InputTypeOther         InputType = "other"
+)
+
+func (e *InputType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = InputType(s)
+	case string:
+		*e = InputType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for InputType: %T", src)
+	}
+	return nil
+}
+
+type NullInputType struct {
+	InputType InputType `json:"input_type"`
+	Valid     bool      `json:"valid"` // Valid is true if InputType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullInputType) Scan(value interface{}) error {
+	if value == nil {
+		ns.InputType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.InputType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullInputType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.InputType), nil
+}
+
+type TaskStatus string
+
+const (
+	TaskStatusNotStarted TaskStatus = "not_started"
+	TaskStatusInProgress TaskStatus = "in_progress"
+	TaskStatusCompleted  TaskStatus = "completed"
+	TaskStatusStopped    TaskStatus = "stopped"
+)
+
+func (e *TaskStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskStatus(s)
+	case string:
+		*e = TaskStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTaskStatus struct {
+	TaskStatus TaskStatus `json:"task_status"`
+	Valid      bool       `json:"valid"` // Valid is true if TaskStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskStatus), nil
+}
+
+type Analysis struct {
+	AnalysisID     int32        `json:"analysis_id"`
+	SalesProcessID int32        `json:"sales_process_id"`
+	Version        int32        `json:"version"`
+	CreatedAt      sql.NullTime `json:"created_at"`
+	UpdatedAt      sql.NullTime `json:"updated_at"`
+}
+
+type AnalysisContactInfo struct {
+	AnalysisID          int32          `json:"analysis_id"`
+	Problems            sql.NullString `json:"problems"`
+	Needs               sql.NullString `json:"needs"`
+	Urgency             sql.NullString `json:"urgency"`
+	Priorities          sql.NullString `json:"priorities"`
+	DecisionProcess     sql.NullString `json:"decision_process"`
+	Budget              sql.NullString `json:"budget"`
+	Resources           sql.NullString `json:"resources"`
+	RelevantInformation sql.NullString `json:"relevant_information"`
+	UpdatedAt           sql.NullTime   `json:"updated_at"`
+}
+
+type AnalysisInput struct {
+	InputID      int32          `json:"input_id"`
+	AnalysisID   int32          `json:"analysis_id"`
+	InputType    InputType      `json:"input_type"`
+	DatasourceID sql.NullInt32  `json:"datasource_id"`
+	Content      sql.NullString `json:"content"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
+}
+
 type Company struct {
-	CompanyID            int32          `json:"company_id"`
-	Name                 string         `json:"name"`
-	Website              sql.NullString `json:"website"`
-	Industry             sql.NullString `json:"industry"`
-	Description          sql.NullString `json:"description"`
-	HeadquartersLocation sql.NullString `json:"headquarters_location"`
-	FoundedYear          sql.NullInt32  `json:"founded_year"`
-	IsPublic             sql.NullBool   `json:"is_public"`
-	TickerSymbol         sql.NullString `json:"ticker_symbol"`
-	ScrapeTimestamp      sql.NullTime   `json:"scrape_timestamp"`
+	CompanyID   int32          `json:"company_id"`
+	UserID      int32          `json:"user_id"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
 }
 
 type CompanyNews struct {
-	NewsID          int32          `json:"news_id"`
-	CompanyID       sql.NullInt32  `json:"company_id"`
-	Title           string         `json:"title"`
-	PublicationDate sql.NullTime   `json:"publication_date"`
-	Source          sql.NullString `json:"source"`
-	Url             sql.NullString `json:"url"`
-	Summary         sql.NullString `json:"summary"`
-	Sentiment       sql.NullString `json:"sentiment"`
-	DatasourceID    sql.NullInt32  `json:"datasource_id"`
-}
-
-type CompanyWebsite struct {
-	WebsiteID           int32          `json:"website_id"`
-	CompanyID           int32          `json:"company_id"`
-	BaseUrl             string         `json:"base_url"`
-	SiteTitle           sql.NullString `json:"site_title"`
-	LastScrapedAt       sql.NullTime   `json:"last_scraped_at"`
-	ScrapeFrequencyDays sql.NullInt32  `json:"scrape_frequency_days"`
-	IsActive            sql.NullBool   `json:"is_active"`
-	DatasourceID        sql.NullInt32  `json:"datasource_id"`
+	CompanyNewsID int32          `json:"company_news_id"`
+	CompanyID     int32          `json:"company_id"`
+	Title         string         `json:"title"`
+	Content       sql.NullString `json:"content"`
+	DatasourceID  sql.NullInt32  `json:"datasource_id"`
+	CreatedAt     sql.NullTime   `json:"created_at"`
 }
 
 type Contact struct {
-	ContactID       int32          `json:"contact_id"`
-	FirstName       sql.NullString `json:"first_name"`
-	LastName        sql.NullString `json:"last_name"`
-	Email           sql.NullString `json:"email"`
-	Phone           sql.NullString `json:"phone"`
-	LinkedinProfile sql.NullString `json:"linkedin_profile"`
-	JobTitle        sql.NullString `json:"job_title"`
-	CompanyID       sql.NullInt32  `json:"company_id"`
-	Location        sql.NullString `json:"location"`
-	Bio             sql.NullString `json:"bio"`
-	ScrapeTimestamp sql.NullTime   `json:"scrape_timestamp"`
+	ContactID int32          `json:"contact_id"`
+	CompanyID int32          `json:"company_id"`
+	FirstName string         `json:"first_name"`
+	LastName  string         `json:"last_name"`
+	Position  sql.NullString `json:"position"`
+	Email     sql.NullString `json:"email"`
+	Phone     sql.NullString `json:"phone"`
+	Notes     sql.NullString `json:"notes"`
+	CreatedAt sql.NullTime   `json:"created_at"`
 }
 
 type ContactNews struct {
-	MentionID       int32          `json:"mention_id"`
-	ContactID       sql.NullInt32  `json:"contact_id"`
-	Title           string         `json:"title"`
-	PublicationDate sql.NullTime   `json:"publication_date"`
-	Source          sql.NullString `json:"source"`
-	Url             sql.NullString `json:"url"`
-	Summary         sql.NullString `json:"summary"`
-	DatasourceID    sql.NullInt32  `json:"datasource_id"`
+	ContactNewsID int32          `json:"contact_news_id"`
+	ContactID     int32          `json:"contact_id"`
+	Title         string         `json:"title"`
+	Content       sql.NullString `json:"content"`
+	DatasourceID  sql.NullInt32  `json:"datasource_id"`
+	CreatedAt     sql.NullTime   `json:"created_at"`
+}
+
+type CustomerNeed struct {
+	NeedID          int32        `json:"need_id"`
+	SalesProcessID  int32        `json:"sales_process_id"`
+	NeedDescription string       `json:"need_description"`
+	CreatedAt       sql.NullTime `json:"created_at"`
 }
 
 type Datasource struct {
-	DatasourceID        int32         `json:"datasource_id"`
-	SourceType          string        `json:"source_type"`
-	SourceID            sql.NullInt32 `json:"source_id"`
-	ExtractionTimestamp sql.NullTime  `json:"extraction_timestamp"`
+	DatasourceID int32          `json:"datasource_id"`
+	SourceType   DatasourceType `json:"source_type"`
+	Link         sql.NullString `json:"link"`
+	FileData     []byte         `json:"file_data"`
+	FileName     sql.NullString `json:"file_name"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
 }
 
-type MatchingScoreCriterium struct {
-	CriteriaID  int32          `json:"criteria_id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	Weight      string         `json:"weight"`
+type Meeting struct {
+	MeetingID      int32          `json:"meeting_id"`
+	SalesProcessID int32          `json:"sales_process_id"`
+	ContactID      int32          `json:"contact_id"`
+	TaskID         sql.NullInt32  `json:"task_id"`
+	MeetingTime    time.Time      `json:"meeting_time"`
+	MeetingPlace   sql.NullString `json:"meeting_place"`
+	Notes          sql.NullString `json:"notes"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
 }
 
-type Paragraph struct {
-	ParagraphID     int32          `json:"paragraph_id"`
-	DatasourceID    sql.NullInt32  `json:"datasource_id"`
-	Content         string         `json:"content"`
-	MainIdea        sql.NullString `json:"main_idea"`
-	Classification  sql.NullString `json:"classification"`
-	ConfidenceScore sql.NullString `json:"confidence_score"`
-}
-
-type Project struct {
-	ProjectID     int32          `json:"project_id"`
-	UserID        sql.NullInt32  `json:"user_id"`
-	ProjectName   string         `json:"project_name"`
-	Description   sql.NullString `json:"description"`
-	CreatedAt     sql.NullTime   `json:"created_at"`
-	LastUpdatedAt sql.NullTime   `json:"last_updated_at"`
-}
-
-type ProjectCompany struct {
-	ProjectID        int32          `json:"project_id"`
-	CompanyID        int32          `json:"company_id"`
-	AssociationNotes sql.NullString `json:"association_notes"`
-	MatchingScore    sql.NullString `json:"matching_score"`
-	ApproachStrategy sql.NullString `json:"approach_strategy"`
-}
-
-type ProjectContact struct {
-	ProjectID        int32          `json:"project_id"`
-	ContactID        int32          `json:"contact_id"`
-	AssociationNotes sql.NullString `json:"association_notes"`
-}
-
-type ProjectFile struct {
-	FileID     int32         `json:"file_id"`
-	ProjectID  sql.NullInt32 `json:"project_id"`
-	FileName   string        `json:"file_name"`
-	FileType   string        `json:"file_type"`
-	FilePath   string        `json:"file_path"`
-	UploadedAt sql.NullTime  `json:"uploaded_at"`
-	FileSize   sql.NullInt32 `json:"file_size"`
-}
-
-type User struct {
-	UserID       int32        `json:"user_id"`
-	Username     string       `json:"username"`
-	Email        string       `json:"email"`
-	PasswordHash string       `json:"password_hash"`
+type NeedsDatasourceMatch struct {
+	MatchID      int32        `json:"match_id"`
+	NeedID       int32        `json:"need_id"`
+	DatasourceID int32        `json:"datasource_id"`
+	MatchScore   string       `json:"match_score"`
 	CreatedAt    sql.NullTime `json:"created_at"`
 }
 
-type WebsitePage struct {
-	PageID          int32          `json:"page_id"`
-	WebsiteID       int32          `json:"website_id"`
-	Url             string         `json:"url"`
-	Path            string         `json:"path"`
-	Title           sql.NullString `json:"title"`
-	ParentPageID    sql.NullInt32  `json:"parent_page_id"`
-	Depth           int32          `json:"depth"`
-	LastExtractedAt sql.NullTime   `json:"last_extracted_at"`
-	ExtractStatus   sql.NullString `json:"extract_status"`
-	DatasourceID    sql.NullInt32  `json:"datasource_id"`
+type Paragraph struct {
+	ParagraphID  int32          `json:"paragraph_id"`
+	DatasourceID int32          `json:"datasource_id"`
+	Title        sql.NullString `json:"title"`
+	MainIdea     sql.NullString `json:"main_idea"`
+	Content      string         `json:"content"`
+	CreatedAt    sql.NullTime   `json:"created_at"`
+}
+
+type Project struct {
+	ProjectID   int32          `json:"project_id"`
+	UserID      int32          `json:"user_id"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+type ProjectDatasource struct {
+	ProjectID    int32 `json:"project_id"`
+	DatasourceID int32 `json:"datasource_id"`
+}
+
+type PropositionDraft struct {
+	DraftID        int32          `json:"draft_id"`
+	SalesProcessID int32          `json:"sales_process_id"`
+	Title          string         `json:"title"`
+	Content        sql.NullString `json:"content"`
+	Version        int32          `json:"version"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+	UpdatedAt      sql.NullTime   `json:"updated_at"`
+}
+
+type SalesProcess struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	UserID               int32          `json:"user_id"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+type SalesProcessProject struct {
+	SalesProcessID int32 `json:"sales_process_id"`
+	ProjectID      int32 `json:"project_id"`
+}
+
+type Task struct {
+	TaskID         int32          `json:"task_id"`
+	SalesProcessID int32          `json:"sales_process_id"`
+	Title          string         `json:"title"`
+	Description    sql.NullString `json:"description"`
+	Status         TaskStatus     `json:"status"`
+	DueDate        sql.NullTime   `json:"due_date"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+	UpdatedAt      sql.NullTime   `json:"updated_at"`
+}
+
+type User struct {
+	UserID    int32        `json:"user_id"`
+	Username  string       `json:"username"`
+	Password  string       `json:"password"`
+	CreatedAt sql.NullTime `json:"created_at"`
 }

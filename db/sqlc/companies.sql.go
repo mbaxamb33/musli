@@ -12,48 +12,40 @@ import (
 
 const createCompany = `-- name: CreateCompany :one
 INSERT INTO companies (
-    name, website, industry, description,
-    headquarters_location, founded_year, is_public, ticker_symbol
+    user_id, company_name, industry, website, address, description
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING company_id, name, website, industry, description,
-          headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING company_id, user_id, company_name, industry, website, address, description, created_at
 `
 
 type CreateCompanyParams struct {
-	Name                 string         `json:"name"`
-	Website              sql.NullString `json:"website"`
-	Industry             sql.NullString `json:"industry"`
-	Description          sql.NullString `json:"description"`
-	HeadquartersLocation sql.NullString `json:"headquarters_location"`
-	FoundedYear          sql.NullInt32  `json:"founded_year"`
-	IsPublic             sql.NullBool   `json:"is_public"`
-	TickerSymbol         sql.NullString `json:"ticker_symbol"`
+	UserID      int32          `json:"user_id"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
 }
 
 func (q *Queries) CreateCompany(ctx context.Context, arg CreateCompanyParams) (Company, error) {
 	row := q.db.QueryRowContext(ctx, createCompany,
-		arg.Name,
-		arg.Website,
+		arg.UserID,
+		arg.CompanyName,
 		arg.Industry,
+		arg.Website,
+		arg.Address,
 		arg.Description,
-		arg.HeadquartersLocation,
-		arg.FoundedYear,
-		arg.IsPublic,
-		arg.TickerSymbol,
 	)
 	var i Company
 	err := row.Scan(
 		&i.CompanyID,
-		&i.Name,
-		&i.Website,
+		&i.UserID,
+		&i.CompanyName,
 		&i.Industry,
+		&i.Website,
+		&i.Address,
 		&i.Description,
-		&i.HeadquartersLocation,
-		&i.FoundedYear,
-		&i.IsPublic,
-		&i.TickerSymbol,
-		&i.ScrapeTimestamp,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -68,9 +60,54 @@ func (q *Queries) DeleteCompany(ctx context.Context, companyID int32) error {
 	return err
 }
 
+const getCompaniesByUserID = `-- name: GetCompaniesByUserID :many
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
+FROM companies
+WHERE user_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type GetCompaniesByUserIDParams struct {
+	UserID int32 `json:"user_id"`
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetCompaniesByUserID(ctx context.Context, arg GetCompaniesByUserIDParams) ([]Company, error) {
+	rows, err := q.db.QueryContext(ctx, getCompaniesByUserID, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Company
+	for rows.Next() {
+		var i Company
+		if err := rows.Scan(
+			&i.CompanyID,
+			&i.UserID,
+			&i.CompanyName,
+			&i.Industry,
+			&i.Website,
+			&i.Address,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCompanyByID = `-- name: GetCompanyByID :one
-SELECT company_id, name, website, industry, description,
-       headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
 FROM companies
 WHERE company_id = $1
 `
@@ -80,49 +117,43 @@ func (q *Queries) GetCompanyByID(ctx context.Context, companyID int32) (Company,
 	var i Company
 	err := row.Scan(
 		&i.CompanyID,
-		&i.Name,
-		&i.Website,
+		&i.UserID,
+		&i.CompanyName,
 		&i.Industry,
+		&i.Website,
+		&i.Address,
 		&i.Description,
-		&i.HeadquartersLocation,
-		&i.FoundedYear,
-		&i.IsPublic,
-		&i.TickerSymbol,
-		&i.ScrapeTimestamp,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCompanyByName = `-- name: GetCompanyByName :one
-SELECT company_id, name, website, industry, description,
-       headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
 FROM companies
-WHERE name = $1
+WHERE company_name = $1
 `
 
-func (q *Queries) GetCompanyByName(ctx context.Context, name string) (Company, error) {
-	row := q.db.QueryRowContext(ctx, getCompanyByName, name)
+func (q *Queries) GetCompanyByName(ctx context.Context, companyName string) (Company, error) {
+	row := q.db.QueryRowContext(ctx, getCompanyByName, companyName)
 	var i Company
 	err := row.Scan(
 		&i.CompanyID,
-		&i.Name,
-		&i.Website,
+		&i.UserID,
+		&i.CompanyName,
 		&i.Industry,
+		&i.Website,
+		&i.Address,
 		&i.Description,
-		&i.HeadquartersLocation,
-		&i.FoundedYear,
-		&i.IsPublic,
-		&i.TickerSymbol,
-		&i.ScrapeTimestamp,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listCompanies = `-- name: ListCompanies :many
-SELECT company_id, name, website, industry, description,
-       headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+SELECT company_id, user_id, company_name, industry, website, address, description, created_at
 FROM companies
-ORDER BY scrape_timestamp DESC
+ORDER BY company_name ASC
 LIMIT $1 OFFSET $2
 `
 
@@ -142,15 +173,13 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 		var i Company
 		if err := rows.Scan(
 			&i.CompanyID,
-			&i.Name,
-			&i.Website,
+			&i.UserID,
+			&i.CompanyName,
 			&i.Industry,
+			&i.Website,
+			&i.Address,
 			&i.Description,
-			&i.HeadquartersLocation,
-			&i.FoundedYear,
-			&i.IsPublic,
-			&i.TickerSymbol,
-			&i.ScrapeTimestamp,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -167,56 +196,43 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 
 const updateCompany = `-- name: UpdateCompany :one
 UPDATE companies
-SET name = $2,
-    website = $3,
-    industry = $4,
-    description = $5,
-    headquarters_location = $6,
-    founded_year = $7,
-    is_public = $8,
-    ticker_symbol = $9,
-    scrape_timestamp = CURRENT_TIMESTAMP
+SET company_name = $2,
+    industry = $3,
+    website = $4,
+    address = $5,
+    description = $6
 WHERE company_id = $1
-RETURNING company_id, name, website, industry, description,
-          headquarters_location, founded_year, is_public, ticker_symbol, scrape_timestamp
+RETURNING company_id, user_id, company_name, industry, website, address, description, created_at
 `
 
 type UpdateCompanyParams struct {
-	CompanyID            int32          `json:"company_id"`
-	Name                 string         `json:"name"`
-	Website              sql.NullString `json:"website"`
-	Industry             sql.NullString `json:"industry"`
-	Description          sql.NullString `json:"description"`
-	HeadquartersLocation sql.NullString `json:"headquarters_location"`
-	FoundedYear          sql.NullInt32  `json:"founded_year"`
-	IsPublic             sql.NullBool   `json:"is_public"`
-	TickerSymbol         sql.NullString `json:"ticker_symbol"`
+	CompanyID   int32          `json:"company_id"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
 }
 
 func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (Company, error) {
 	row := q.db.QueryRowContext(ctx, updateCompany,
 		arg.CompanyID,
-		arg.Name,
-		arg.Website,
+		arg.CompanyName,
 		arg.Industry,
+		arg.Website,
+		arg.Address,
 		arg.Description,
-		arg.HeadquartersLocation,
-		arg.FoundedYear,
-		arg.IsPublic,
-		arg.TickerSymbol,
 	)
 	var i Company
 	err := row.Scan(
 		&i.CompanyID,
-		&i.Name,
-		&i.Website,
+		&i.UserID,
+		&i.CompanyName,
 		&i.Industry,
+		&i.Website,
+		&i.Address,
 		&i.Description,
-		&i.HeadquartersLocation,
-		&i.FoundedYear,
-		&i.IsPublic,
-		&i.TickerSymbol,
-		&i.ScrapeTimestamp,
+		&i.CreatedAt,
 	)
 	return i, err
 }

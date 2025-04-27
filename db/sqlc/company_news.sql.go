@@ -12,98 +12,84 @@ import (
 
 const createCompanyNews = `-- name: CreateCompanyNews :one
 INSERT INTO company_news (
-    company_id, title, publication_date, source, url, summary, sentiment, datasource_id
+    company_id, title, content, datasource_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING news_id, company_id, title, publication_date, source, url, summary, sentiment, datasource_id
+VALUES ($1, $2, $3, $4)
+RETURNING company_news_id, company_id, title, content, datasource_id, created_at
 `
 
 type CreateCompanyNewsParams struct {
-	CompanyID       sql.NullInt32  `json:"company_id"`
-	Title           string         `json:"title"`
-	PublicationDate sql.NullTime   `json:"publication_date"`
-	Source          sql.NullString `json:"source"`
-	Url             sql.NullString `json:"url"`
-	Summary         sql.NullString `json:"summary"`
-	Sentiment       sql.NullString `json:"sentiment"`
-	DatasourceID    sql.NullInt32  `json:"datasource_id"`
+	CompanyID    int32          `json:"company_id"`
+	Title        string         `json:"title"`
+	Content      sql.NullString `json:"content"`
+	DatasourceID sql.NullInt32  `json:"datasource_id"`
 }
 
 func (q *Queries) CreateCompanyNews(ctx context.Context, arg CreateCompanyNewsParams) (CompanyNews, error) {
 	row := q.db.QueryRowContext(ctx, createCompanyNews,
 		arg.CompanyID,
 		arg.Title,
-		arg.PublicationDate,
-		arg.Source,
-		arg.Url,
-		arg.Summary,
-		arg.Sentiment,
+		arg.Content,
 		arg.DatasourceID,
 	)
 	var i CompanyNews
 	err := row.Scan(
-		&i.NewsID,
+		&i.CompanyNewsID,
 		&i.CompanyID,
 		&i.Title,
-		&i.PublicationDate,
-		&i.Source,
-		&i.Url,
-		&i.Summary,
-		&i.Sentiment,
+		&i.Content,
 		&i.DatasourceID,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const deleteCompanyNews = `-- name: DeleteCompanyNews :exec
 DELETE FROM company_news
-WHERE news_id = $1
+WHERE company_news_id = $1
 `
 
-func (q *Queries) DeleteCompanyNews(ctx context.Context, newsID int32) error {
-	_, err := q.db.ExecContext(ctx, deleteCompanyNews, newsID)
+func (q *Queries) DeleteCompanyNews(ctx context.Context, companyNewsID int32) error {
+	_, err := q.db.ExecContext(ctx, deleteCompanyNews, companyNewsID)
 	return err
 }
 
 const getCompanyNewsByID = `-- name: GetCompanyNewsByID :one
-SELECT news_id, company_id, title, publication_date, source, url, summary, sentiment, datasource_id
+SELECT company_news_id, company_id, title, content, datasource_id, created_at
 FROM company_news
-WHERE news_id = $1
+WHERE company_news_id = $1
 `
 
-func (q *Queries) GetCompanyNewsByID(ctx context.Context, newsID int32) (CompanyNews, error) {
-	row := q.db.QueryRowContext(ctx, getCompanyNewsByID, newsID)
+func (q *Queries) GetCompanyNewsByID(ctx context.Context, companyNewsID int32) (CompanyNews, error) {
+	row := q.db.QueryRowContext(ctx, getCompanyNewsByID, companyNewsID)
 	var i CompanyNews
 	err := row.Scan(
-		&i.NewsID,
+		&i.CompanyNewsID,
 		&i.CompanyID,
 		&i.Title,
-		&i.PublicationDate,
-		&i.Source,
-		&i.Url,
-		&i.Summary,
-		&i.Sentiment,
+		&i.Content,
 		&i.DatasourceID,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const listCompanyNewsByCompany = `-- name: ListCompanyNewsByCompany :many
-SELECT news_id, company_id, title, publication_date, source, url, summary, sentiment, datasource_id
+const listNewsByCompany = `-- name: ListNewsByCompany :many
+SELECT company_news_id, company_id, title, content, datasource_id, created_at
 FROM company_news
 WHERE company_id = $1
-ORDER BY publication_date DESC
+ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
-type ListCompanyNewsByCompanyParams struct {
-	CompanyID sql.NullInt32 `json:"company_id"`
-	Limit     int32         `json:"limit"`
-	Offset    int32         `json:"offset"`
+type ListNewsByCompanyParams struct {
+	CompanyID int32 `json:"company_id"`
+	Limit     int32 `json:"limit"`
+	Offset    int32 `json:"offset"`
 }
 
-func (q *Queries) ListCompanyNewsByCompany(ctx context.Context, arg ListCompanyNewsByCompanyParams) ([]CompanyNews, error) {
-	rows, err := q.db.QueryContext(ctx, listCompanyNewsByCompany, arg.CompanyID, arg.Limit, arg.Offset)
+func (q *Queries) ListNewsByCompany(ctx context.Context, arg ListNewsByCompanyParams) ([]CompanyNews, error) {
+	rows, err := q.db.QueryContext(ctx, listNewsByCompany, arg.CompanyID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -112,109 +98,12 @@ func (q *Queries) ListCompanyNewsByCompany(ctx context.Context, arg ListCompanyN
 	for rows.Next() {
 		var i CompanyNews
 		if err := rows.Scan(
-			&i.NewsID,
+			&i.CompanyNewsID,
 			&i.CompanyID,
 			&i.Title,
-			&i.PublicationDate,
-			&i.Source,
-			&i.Url,
-			&i.Summary,
-			&i.Sentiment,
+			&i.Content,
 			&i.DatasourceID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCompanyNewsByDatasource = `-- name: ListCompanyNewsByDatasource :many
-SELECT news_id, company_id, title, publication_date, source, url, summary, sentiment, datasource_id
-FROM company_news
-WHERE datasource_id = $1
-ORDER BY publication_date DESC
-LIMIT $2 OFFSET $3
-`
-
-type ListCompanyNewsByDatasourceParams struct {
-	DatasourceID sql.NullInt32 `json:"datasource_id"`
-	Limit        int32         `json:"limit"`
-	Offset       int32         `json:"offset"`
-}
-
-func (q *Queries) ListCompanyNewsByDatasource(ctx context.Context, arg ListCompanyNewsByDatasourceParams) ([]CompanyNews, error) {
-	rows, err := q.db.QueryContext(ctx, listCompanyNewsByDatasource, arg.DatasourceID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CompanyNews
-	for rows.Next() {
-		var i CompanyNews
-		if err := rows.Scan(
-			&i.NewsID,
-			&i.CompanyID,
-			&i.Title,
-			&i.PublicationDate,
-			&i.Source,
-			&i.Url,
-			&i.Summary,
-			&i.Sentiment,
-			&i.DatasourceID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCompanyNewsBySentiment = `-- name: ListCompanyNewsBySentiment :many
-SELECT news_id, company_id, title, publication_date, source, url, summary, sentiment, datasource_id
-FROM company_news
-WHERE sentiment = $1
-ORDER BY publication_date DESC
-LIMIT $2 OFFSET $3
-`
-
-type ListCompanyNewsBySentimentParams struct {
-	Sentiment sql.NullString `json:"sentiment"`
-	Limit     int32          `json:"limit"`
-	Offset    int32          `json:"offset"`
-}
-
-func (q *Queries) ListCompanyNewsBySentiment(ctx context.Context, arg ListCompanyNewsBySentimentParams) ([]CompanyNews, error) {
-	rows, err := q.db.QueryContext(ctx, listCompanyNewsBySentiment, arg.Sentiment, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CompanyNews
-	for rows.Next() {
-		var i CompanyNews
-		if err := rows.Scan(
-			&i.NewsID,
-			&i.CompanyID,
-			&i.Title,
-			&i.PublicationDate,
-			&i.Source,
-			&i.Url,
-			&i.Summary,
-			&i.Sentiment,
-			&i.DatasourceID,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -232,46 +121,27 @@ func (q *Queries) ListCompanyNewsBySentiment(ctx context.Context, arg ListCompan
 const updateCompanyNews = `-- name: UpdateCompanyNews :one
 UPDATE company_news
 SET title = $2,
-    publication_date = $3,
-    source = $4,
-    url = $5,
-    summary = $6,
-    sentiment = $7
-WHERE news_id = $1
-RETURNING news_id, company_id, title, publication_date, source, url, summary, sentiment, datasource_id
+    content = $3
+WHERE company_news_id = $1
+RETURNING company_news_id, company_id, title, content, datasource_id, created_at
 `
 
 type UpdateCompanyNewsParams struct {
-	NewsID          int32          `json:"news_id"`
-	Title           string         `json:"title"`
-	PublicationDate sql.NullTime   `json:"publication_date"`
-	Source          sql.NullString `json:"source"`
-	Url             sql.NullString `json:"url"`
-	Summary         sql.NullString `json:"summary"`
-	Sentiment       sql.NullString `json:"sentiment"`
+	CompanyNewsID int32          `json:"company_news_id"`
+	Title         string         `json:"title"`
+	Content       sql.NullString `json:"content"`
 }
 
 func (q *Queries) UpdateCompanyNews(ctx context.Context, arg UpdateCompanyNewsParams) (CompanyNews, error) {
-	row := q.db.QueryRowContext(ctx, updateCompanyNews,
-		arg.NewsID,
-		arg.Title,
-		arg.PublicationDate,
-		arg.Source,
-		arg.Url,
-		arg.Summary,
-		arg.Sentiment,
-	)
+	row := q.db.QueryRowContext(ctx, updateCompanyNews, arg.CompanyNewsID, arg.Title, arg.Content)
 	var i CompanyNews
 	err := row.Scan(
-		&i.NewsID,
+		&i.CompanyNewsID,
 		&i.CompanyID,
 		&i.Title,
-		&i.PublicationDate,
-		&i.Source,
-		&i.Url,
-		&i.Summary,
-		&i.Sentiment,
+		&i.Content,
 		&i.DatasourceID,
+		&i.CreatedAt,
 	)
 	return i, err
 }

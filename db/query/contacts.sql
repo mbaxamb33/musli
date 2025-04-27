@@ -1,49 +1,46 @@
 -- name: CreateContact :one
 INSERT INTO contacts (
-    first_name, last_name, email, phone, linkedin_profile,
-    job_title, company_id, location, bio
+    company_id, first_name, last_name, position, email, phone, notes
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING contact_id, first_name, last_name, email, phone, linkedin_profile,
-          job_title, company_id, location, bio, scrape_timestamp;
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING contact_id, company_id, first_name, last_name, position, email, phone, notes, created_at;
 
 -- name: GetContactByID :one
-SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
-       job_title, company_id, location, bio, scrape_timestamp
+SELECT contact_id, company_id, first_name, last_name, position, email, phone, notes, created_at
 FROM contacts
 WHERE contact_id = $1;
 
--- name: ListContactsByCompany :many
-SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
-       job_title, company_id, location, bio, scrape_timestamp
+-- name: ListContactsByCompanyID :many
+SELECT contact_id, company_id, first_name, last_name, position, email, phone, notes, created_at
 FROM contacts
 WHERE company_id = $1
-ORDER BY scrape_timestamp DESC
+ORDER BY last_name, first_name ASC
 LIMIT $2 OFFSET $3;
 
 -- name: SearchContactsByName :many
-SELECT contact_id, first_name, last_name, email, phone, linkedin_profile,
-       job_title, company_id, location, bio, scrape_timestamp
+SELECT contact_id, company_id, first_name, last_name, position, email, phone, notes, created_at
 FROM contacts
-WHERE LOWER(first_name) LIKE LOWER($1) OR LOWER(last_name) LIKE LOWER($1)
-ORDER BY scrape_timestamp DESC
+WHERE (first_name ILIKE '%' || $1 || '%' OR last_name ILIKE '%' || $1 || '%')
+ORDER BY last_name, first_name ASC
 LIMIT $2 OFFSET $3;
+
+-- name: SearchContactsByCompanyAndName :many
+SELECT contact_id, company_id, first_name, last_name, position, email, phone, notes, created_at
+FROM contacts
+WHERE company_id = $1 AND (first_name ILIKE '%' || $2 || '%' OR last_name ILIKE '%' || $2 || '%')
+ORDER BY last_name, first_name ASC
+LIMIT $3 OFFSET $4;
 
 -- name: UpdateContact :one
 UPDATE contacts
 SET first_name = $2,
     last_name = $3,
-    email = $4,
-    phone = $5,
-    linkedin_profile = $6,
-    job_title = $7,
-    company_id = $8,
-    location = $9,
-    bio = $10,
-    scrape_timestamp = CURRENT_TIMESTAMP
+    position = $4,
+    email = $5,
+    phone = $6,
+    notes = $7
 WHERE contact_id = $1
-RETURNING contact_id, first_name, last_name, email, phone, linkedin_profile,
-          job_title, company_id, location, bio, scrape_timestamp;
+RETURNING contact_id, company_id, first_name, last_name, position, email, phone, notes, created_at;
 
 -- name: DeleteContact :exec
 DELETE FROM contacts

@@ -12,36 +12,34 @@ import (
 
 const createParagraph = `-- name: CreateParagraph :one
 INSERT INTO paragraphs (
-    datasource_id, content, main_idea, classification, confidence_score
+    datasource_id, title, main_idea, content
 )
-VALUES ($1, $2, $3, $4, $5)
-RETURNING paragraph_id, datasource_id, content, main_idea, classification, confidence_score
+VALUES ($1, $2, $3, $4)
+RETURNING paragraph_id, datasource_id, title, main_idea, content, created_at
 `
 
 type CreateParagraphParams struct {
-	DatasourceID    sql.NullInt32  `json:"datasource_id"`
-	Content         string         `json:"content"`
-	MainIdea        sql.NullString `json:"main_idea"`
-	Classification  sql.NullString `json:"classification"`
-	ConfidenceScore sql.NullString `json:"confidence_score"`
+	DatasourceID int32          `json:"datasource_id"`
+	Title        sql.NullString `json:"title"`
+	MainIdea     sql.NullString `json:"main_idea"`
+	Content      string         `json:"content"`
 }
 
 func (q *Queries) CreateParagraph(ctx context.Context, arg CreateParagraphParams) (Paragraph, error) {
 	row := q.db.QueryRowContext(ctx, createParagraph,
 		arg.DatasourceID,
-		arg.Content,
+		arg.Title,
 		arg.MainIdea,
-		arg.Classification,
-		arg.ConfidenceScore,
+		arg.Content,
 	)
 	var i Paragraph
 	err := row.Scan(
 		&i.ParagraphID,
 		&i.DatasourceID,
-		&i.Content,
+		&i.Title,
 		&i.MainIdea,
-		&i.Classification,
-		&i.ConfidenceScore,
+		&i.Content,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -57,7 +55,7 @@ func (q *Queries) DeleteParagraph(ctx context.Context, paragraphID int32) error 
 }
 
 const getParagraphByID = `-- name: GetParagraphByID :one
-SELECT paragraph_id, datasource_id, content, main_idea, classification, confidence_score
+SELECT paragraph_id, datasource_id, title, main_idea, content, created_at
 FROM paragraphs
 WHERE paragraph_id = $1
 `
@@ -68,60 +66,16 @@ func (q *Queries) GetParagraphByID(ctx context.Context, paragraphID int32) (Para
 	err := row.Scan(
 		&i.ParagraphID,
 		&i.DatasourceID,
-		&i.Content,
+		&i.Title,
 		&i.MainIdea,
-		&i.Classification,
-		&i.ConfidenceScore,
+		&i.Content,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const listParagraphsByClassification = `-- name: ListParagraphsByClassification :many
-SELECT paragraph_id, datasource_id, content, main_idea, classification, confidence_score
-FROM paragraphs
-WHERE classification = $1
-ORDER BY confidence_score DESC
-LIMIT $2 OFFSET $3
-`
-
-type ListParagraphsByClassificationParams struct {
-	Classification sql.NullString `json:"classification"`
-	Limit          int32          `json:"limit"`
-	Offset         int32          `json:"offset"`
-}
-
-func (q *Queries) ListParagraphsByClassification(ctx context.Context, arg ListParagraphsByClassificationParams) ([]Paragraph, error) {
-	rows, err := q.db.QueryContext(ctx, listParagraphsByClassification, arg.Classification, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Paragraph
-	for rows.Next() {
-		var i Paragraph
-		if err := rows.Scan(
-			&i.ParagraphID,
-			&i.DatasourceID,
-			&i.Content,
-			&i.MainIdea,
-			&i.Classification,
-			&i.ConfidenceScore,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listParagraphsByDatasource = `-- name: ListParagraphsByDatasource :many
-SELECT paragraph_id, datasource_id, content, main_idea, classification, confidence_score
+SELECT paragraph_id, datasource_id, title, main_idea, content, created_at
 FROM paragraphs
 WHERE datasource_id = $1
 ORDER BY paragraph_id ASC
@@ -129,9 +83,9 @@ LIMIT $2 OFFSET $3
 `
 
 type ListParagraphsByDatasourceParams struct {
-	DatasourceID sql.NullInt32 `json:"datasource_id"`
-	Limit        int32         `json:"limit"`
-	Offset       int32         `json:"offset"`
+	DatasourceID int32 `json:"datasource_id"`
+	Limit        int32 `json:"limit"`
+	Offset       int32 `json:"offset"`
 }
 
 func (q *Queries) ListParagraphsByDatasource(ctx context.Context, arg ListParagraphsByDatasourceParams) ([]Paragraph, error) {
@@ -146,10 +100,54 @@ func (q *Queries) ListParagraphsByDatasource(ctx context.Context, arg ListParagr
 		if err := rows.Scan(
 			&i.ParagraphID,
 			&i.DatasourceID,
-			&i.Content,
+			&i.Title,
 			&i.MainIdea,
-			&i.Classification,
-			&i.ConfidenceScore,
+			&i.Content,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchParagraphsByContent = `-- name: SearchParagraphsByContent :many
+SELECT paragraph_id, datasource_id, title, main_idea, content, created_at
+FROM paragraphs
+WHERE content ILIKE '%' || $1 || '%' OR main_idea ILIKE '%' || $1 || '%'
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type SearchParagraphsByContentParams struct {
+	Column1 sql.NullString `json:"column_1"`
+	Limit   int32          `json:"limit"`
+	Offset  int32          `json:"offset"`
+}
+
+func (q *Queries) SearchParagraphsByContent(ctx context.Context, arg SearchParagraphsByContentParams) ([]Paragraph, error) {
+	rows, err := q.db.QueryContext(ctx, searchParagraphsByContent, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Paragraph
+	for rows.Next() {
+		var i Paragraph
+		if err := rows.Scan(
+			&i.ParagraphID,
+			&i.DatasourceID,
+			&i.Title,
+			&i.MainIdea,
+			&i.Content,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -166,38 +164,35 @@ func (q *Queries) ListParagraphsByDatasource(ctx context.Context, arg ListParagr
 
 const updateParagraph = `-- name: UpdateParagraph :one
 UPDATE paragraphs
-SET content = $2,
+SET title = $2,
     main_idea = $3,
-    classification = $4,
-    confidence_score = $5
+    content = $4
 WHERE paragraph_id = $1
-RETURNING paragraph_id, datasource_id, content, main_idea, classification, confidence_score
+RETURNING paragraph_id, datasource_id, title, main_idea, content, created_at
 `
 
 type UpdateParagraphParams struct {
-	ParagraphID     int32          `json:"paragraph_id"`
-	Content         string         `json:"content"`
-	MainIdea        sql.NullString `json:"main_idea"`
-	Classification  sql.NullString `json:"classification"`
-	ConfidenceScore sql.NullString `json:"confidence_score"`
+	ParagraphID int32          `json:"paragraph_id"`
+	Title       sql.NullString `json:"title"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	Content     string         `json:"content"`
 }
 
 func (q *Queries) UpdateParagraph(ctx context.Context, arg UpdateParagraphParams) (Paragraph, error) {
 	row := q.db.QueryRowContext(ctx, updateParagraph,
 		arg.ParagraphID,
-		arg.Content,
+		arg.Title,
 		arg.MainIdea,
-		arg.Classification,
-		arg.ConfidenceScore,
+		arg.Content,
 	)
 	var i Paragraph
 	err := row.Scan(
 		&i.ParagraphID,
 		&i.DatasourceID,
-		&i.Content,
+		&i.Title,
 		&i.MainIdea,
-		&i.Classification,
-		&i.ConfidenceScore,
+		&i.Content,
+		&i.CreatedAt,
 	)
 	return i, err
 }
