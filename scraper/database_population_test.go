@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +21,6 @@ func TestPopulateDruidAI(t *testing.T) {
 	}
 
 	// 1. Set up database connection
-	// Replace these with your actual database credentials
 	connStr := "postgresql://root:secret@localhost:5432/musli?sslmode=disable"
 	dbConn, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -41,59 +39,72 @@ func TestPopulateDruidAI(t *testing.T) {
 	queries := db.New(dbConn)
 	ctx := context.Background()
 
-	// 2. Create scraper for DruidAI
+	// 2. Create enhanced scraper for the website
 	websiteURL := "https://druidai.com"
 	maxDepth := 2 // Keep depth limited for testing
-	fmt.Printf("🔍 Creating scraper for %s (max depth: %d)\n", websiteURL, maxDepth)
+	fmt.Printf("🔍 Creating enhanced scraper for %s (max depth: %d)\n", websiteURL, maxDepth)
 
-	scraper, err := NewScraper(websiteURL, maxDepth)
+	enhancedScraper, err := NewEnhancedScraper(websiteURL, maxDepth)
 	if err != nil {
-		t.Fatalf("Failed to create scraper: %v", err)
+		t.Fatalf("Failed to create enhanced scraper: %v", err)
 	}
 
-	// 3. Run the scraper
-	fmt.Println("🚀 Running scraper and extracting site structure...")
-	err = scraper.Run()
+	// 3. Run the enhanced scraper
+	fmt.Println("🚀 Running enhanced scraper to extract content...")
+	err = enhancedScraper.Run()
 	if err != nil {
-		t.Fatalf("Scraping failed: %v", err)
+		t.Fatalf("Enhanced scraping failed: %v", err)
 	}
-	fmt.Printf("✅ Scraped %d pages\n", len(scraper.Data))
+	fmt.Printf("✅ Extracted %d unique content items\n", len(enhancedScraper.ContentItems))
 
-	// 4. Build site tree
+	// 4. Build site tree (optional, for visualization)
 	fmt.Println("🌳 Building site tree...")
-	_, err = scraper.BuildSiteTree()
+	siteTree, err := enhancedScraper.BuildSiteTree()
 	if err != nil {
 		t.Fatalf("Failed to build site tree: %v", err)
 	}
+	fmt.Println("✅ Built site tree")
 
-	// 5. Create a company record for DruidAI
-	fmt.Println("💾 Creating company record for DruidAI...")
+	// Optional: Print the site tree for debugging
+	fmt.Println("\nSite Tree Structure:")
+	PrintSiteTree(siteTree, "")
+
+	// 5. Create a user
+	fmt.Println("👤 Creating user record...")
+	user, err := queries.CreateUser(ctx, db.CreateUserParams{
+		Username: "analyst_" + randomString(6),
+		Password: "secure_" + randomString(10),
+	})
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+	fmt.Printf("✅ Created user with ID: %d\n", user.UserID)
+
+	// 6. Create a company record
+	fmt.Println("💾 Creating company record...")
+	companyName := "Unknown"
+
+	// Try to extract company name from title
+	if len(enhancedScraper.Data) > 0 {
+		for _, pageData := range enhancedScraper.Data {
+			if strings.Contains(pageData.Title, "DRUID") || strings.Contains(pageData.Title, "Druid") {
+				parts := strings.Split(pageData.Title, " - ")
+				if len(parts) > 1 {
+					companyName = parts[len(parts)-1]
+				} else {
+					companyName = "DRUID AI"
+				}
+				break
+			}
+		}
+	}
+
 	companyParams := db.CreateCompanyParams{
-		Name: "DruidAI",
-		Website: sql.NullString{
-			String: websiteURL,
-			Valid:  true,
-		},
-		Industry: sql.NullString{
-			String: "Artificial Intelligence",
-			Valid:  true,
-		},
-		Description: sql.NullString{
-			String: "DruidAI is a company specializing in conversational AI and intelligent virtual assistants for enterprise solutions.",
-			Valid:  true,
-		},
-		HeadquartersLocation: sql.NullString{
-			String: "Bucharest, Romania",
-			Valid:  true,
-		},
-		FoundedYear: sql.NullInt32{
-			Int32: 2018,
-			Valid: true,
-		},
-		IsPublic: sql.NullBool{
-			Bool:  false,
-			Valid: true,
-		},
+		UserID:      user.UserID,
+		CompanyName: companyName,
+		Industry:    sql.NullString{String: "Artificial Intelligence", Valid: true},
+		Website:     sql.NullString{String: websiteURL, Valid: true},
+		Description: sql.NullString{String: "Company extracted from website content", Valid: true},
 	}
 
 	company, err := queries.CreateCompany(ctx, companyParams)
@@ -102,76 +113,13 @@ func TestPopulateDruidAI(t *testing.T) {
 	}
 	fmt.Printf("✅ Created company with ID: %d\n", company.CompanyID)
 
-	// 6. Create a fictional project
-	fmt.Println("🏗️ Creating project for AI agent integration...")
-	projectParams := db.CreateProjectParams{
-		ProjectName: "AI Agent Integration Platform",
-		Description: sql.NullString{
-			String: "A project to evaluate and implement DruidAI's agent technology for customer service automation and enterprise knowledge base integration.",
-			Valid:  true,
-		},
-	}
-
-	project, err := queries.CreateProject(ctx, projectParams)
-	if err != nil {
-		t.Fatalf("Failed to create project: %v", err)
-	}
-	fmt.Printf("✅ Created project with ID: %d\n", project.ProjectID)
-
-	// 7. Associate company with project
-	fmt.Println("🔗 Associating company with project...")
-	associationParams := db.AssociateCompanyWithProjectParams{
-		ProjectID: project.ProjectID,
-		CompanyID: company.CompanyID,
-		AssociationNotes: sql.NullString{
-			String: "Potential vendor for AI agent solution with strong capabilities in enterprise integration.",
-			Valid:  true,
-		},
-		MatchingScore: sql.NullString{
-			String: "0.85",
-			Valid:  true,
-		},
-		ApproachStrategy: sql.NullString{
-			String: "Request demo of their platform focusing on knowledge base integration and Microsoft ecosystem compatibility.",
-			Valid:  true,
-		},
-	}
-
-	_, err = queries.AssociateCompanyWithProject(ctx, associationParams)
-	if err != nil {
-		t.Fatalf("Failed to associate company with project: %v", err)
-	}
-	fmt.Println("✅ Associated company with project")
-
-	// 8. Create company website record
-	fmt.Println("🌐 Adding company website record...")
-	websiteParams := db.CreateCompanyWebsiteParams{
-		CompanyID: company.CompanyID,
-		BaseUrl:   websiteURL,
-		SiteTitle: sql.NullString{
-			String: getWebsiteTitle(scraper, websiteURL),
-			Valid:  true,
-		},
-		ScrapeFrequencyDays: sql.NullInt32{
-			Int32: 30, // Check monthly
-			Valid: true,
-		},
-		IsActive: sql.NullBool{
-			Bool:  true,
-			Valid: true,
-		},
-	}
-
-	website, err := queries.CreateCompanyWebsite(ctx, websiteParams)
-	if err != nil {
-		t.Fatalf("Failed to create company website: %v", err)
-	}
-	fmt.Printf("✅ Created company website with ID: %d\n", website.WebsiteID)
-
-	// 9. Create datasource record
+	// 7. Create datasource record for the website
 	fmt.Println("📊 Creating datasource record...")
 	datasourceParams := db.CreateDatasourceParams{
-		SourceType: "website",
+		SourceType: db.DatasourceTypeWebsite,
+		Link:       sql.NullString{String: websiteURL, Valid: true},
+		FileName:   sql.NullString{String: "website_data.html", Valid: true},
+		FileData:   []byte("Website content extracted via scraper"),
 	}
 
 	datasource, err := queries.CreateDatasource(ctx, datasourceParams)
@@ -180,216 +128,99 @@ func TestPopulateDruidAI(t *testing.T) {
 	}
 	fmt.Printf("✅ Created datasource with ID: %d\n", datasource.DatasourceID)
 
-	// Update website with datasource ID
-	updateWebsiteParams := db.UpdateCompanyWebsiteParams{
-		WebsiteID: website.WebsiteID,
-		BaseUrl:   website.BaseUrl,
-		SiteTitle: website.SiteTitle,
-		LastScrapedAt: sql.NullTime{
-			Time:  time.Now(),
-			Valid: true,
-		},
-		ScrapeFrequencyDays: website.ScrapeFrequencyDays,
-		IsActive:            website.IsActive,
-		DatasourceID: sql.NullInt32{
-			Int32: datasource.DatasourceID,
-			Valid: true,
-		},
-	}
-
-	_, err = queries.UpdateCompanyWebsite(ctx, updateWebsiteParams)
+	// 8. Associate datasource with company
+	fmt.Println("🔗 Associating datasource with company...")
+	err = queries.AssociateDatasourceWithCompany(ctx, db.AssociateDatasourceWithCompanyParams{
+		CompanyID:    company.CompanyID,
+		DatasourceID: datasource.DatasourceID,
+	})
 	if err != nil {
-		t.Fatalf("Failed to update company website with datasource ID: %v", err)
+		t.Fatalf("Failed to associate datasource with company: %v", err)
 	}
+	fmt.Println("✅ Associated datasource with company")
 
-	// 10. Create website pages
-	fmt.Println("📄 Adding website pages to database...")
-	addedPages := 0
-	for pageURL, pageData := range scraper.Data {
-		// Skip external URLs
-		parsedURL, err := url.Parse(pageURL)
-		if err != nil || !isSameHostname(parsedURL.Hostname(), websiteURL) {
-			continue
-		}
-
-		// Get page path
-		pagePath := parsedURL.Path
-		if pagePath == "" {
-			pagePath = "/"
-		}
-
-		// Determine page depth
-		depth := countPathSegments(pagePath)
-
-		// Create page record
-		pageParams := db.CreateWebsitePageParams{
-			WebsiteID: website.WebsiteID,
-			Url:       pageURL,
-			Path:      pagePath,
-			Title: sql.NullString{
-				String: pageData.Title,
-				Valid:  pageData.Title != "",
-			},
-			Depth: int32(depth),
-			ExtractStatus: sql.NullString{
-				String: "completed",
-				Valid:  true,
-			},
-			DatasourceID: sql.NullInt32{
-				Int32: datasource.DatasourceID,
-				Valid: true,
-			},
-		}
-
-		_, err = queries.CreateWebsitePage(ctx, pageParams)
-		if err != nil {
-			// Log error but continue with other pages
-			log.Printf("Error creating page %s: %v", pageURL, err)
-			continue
-		}
-		addedPages++
-	}
-	fmt.Printf("✅ Added %d website pages to database\n", addedPages)
-
-	// 11. Create some paragraphs from content
-	fmt.Println("📝 Extracting paragraphs from content...")
+	// 9. Create paragraphs from extracted content
+	fmt.Println("📝 Creating paragraphs from extracted content...")
 	addedParagraphs := 0
 
-	// Select a few key pages to extract paragraphs from
-	for pageURL, pageData := range scraper.Data {
-		if strings.Contains(pageURL, "about") || strings.Contains(pageURL, "platform") ||
-			pageURL == websiteURL || strings.Contains(pageURL, "solutions") {
+	// Keep track of content we've already added to the database
+	// This provides additional deduplication at the database level
+	seenHashes := make(map[string]bool)
 
-			// Basic content splitting - in a real implementation, you'd want more sophisticated extraction
-			contentParts := splitIntoParagraphs(pageData.Content)
+	for _, item := range enhancedScraper.ContentItems {
+		// Skip if we've already added this exact content
+		if seenHashes[item.Hash] {
+			continue
+		}
+		seenHashes[item.Hash] = true
 
-			for _, paragraph := range contentParts {
-				// Skip very short paragraphs
-				if len(paragraph) < 50 {
-					continue
-				}
-
-				paragraphParams := db.CreateParagraphParams{
-					DatasourceID: sql.NullInt32{
-						Int32: datasource.DatasourceID,
-						Valid: true,
-					},
-					Content: paragraph,
-					MainIdea: sql.NullString{
-						String: extractMainIdea(paragraph),
-						Valid:  true,
-					},
-					Classification: sql.NullString{
-						String: classifyParagraph(paragraph),
-						Valid:  true,
-					},
-					ConfidenceScore: sql.NullString{
-						String: "0.75", // Fictional score
-						Valid:  true,
-					},
-				}
-
-				_, err = queries.CreateParagraph(ctx, paragraphParams)
-				if err != nil {
-					// Log error but continue with other paragraphs
-					log.Printf("Error creating paragraph: %v", err)
-					continue
-				}
-				addedParagraphs++
-
-				// Limit paragraphs for testing purposes
-				if addedParagraphs >= 10 {
-					break
-				}
-			}
+		// Skip if content is too short
+		if countWords(item.Paragraph) < 10 {
+			continue
 		}
 
-		// Limit to just a few pages for testing purposes
-		if addedParagraphs >= 10 {
-			break
+		paragraphParams := db.CreateParagraphParams{
+			DatasourceID: datasource.DatasourceID,
+			Title:        sql.NullString{String: cleanText(item.Title), Valid: true},
+			MainIdea:     sql.NullString{String: "", Valid: false}, // Leave main idea empty as requested
+			Content:      cleanText(item.Paragraph),
+		}
+
+		_, err = queries.CreateParagraph(ctx, paragraphParams)
+		if err != nil {
+			log.Printf("Error creating paragraph: %v", err)
+			continue
+		}
+		addedParagraphs++
+
+		// Print sample of what we're adding
+		if addedParagraphs <= 5 {
+			fmt.Printf("  Added: Title: %s\n  Paragraph: %s\n\n",
+				truncateString(item.Title, 40),
+				truncateString(item.Paragraph, 100))
 		}
 	}
-	fmt.Printf("✅ Added %d paragraphs to database\n", addedParagraphs)
+	fmt.Printf("✅ Added %d unique paragraphs to database\n", addedParagraphs)
 
-	fmt.Println("✅ Successfully populated database with DruidAI data!")
-}
-
-// Helper functions
-
-func getWebsiteTitle(s *Scraper, url string) string {
-	if data, exists := s.Data[url]; exists && data.Title != "" {
-		return data.Title
+	// 10. Create a contact for the company (optional)
+	fmt.Println("👥 Creating a contact for the company...")
+	contactParams := db.CreateContactParams{
+		CompanyID: company.CompanyID,
+		FirstName: "Contact",
+		LastName:  "Representative",
+		Position:  sql.NullString{String: "Unknown Position", Valid: true},
+		Email:     sql.NullString{String: "contact@" + getDomain(websiteURL), Valid: true},
+		Phone:     sql.NullString{String: "Unknown", Valid: true},
+		Notes:     sql.NullString{String: "Contact extracted from website", Valid: true},
 	}
-	return "DruidAI Website" // Default title
-}
 
-func isSameHostname(hostname, baseURL string) bool {
-	parsed, err := url.Parse(baseURL)
+	contact, err := queries.CreateContact(ctx, contactParams)
 	if err != nil {
-		return false
+		t.Fatalf("Failed to create contact: %v", err)
 	}
+	fmt.Printf("✅ Created contact with ID: %d\n", contact.ContactID)
 
-	baseHost := strings.TrimPrefix(parsed.Hostname(), "www.")
-	hostname = strings.TrimPrefix(hostname, "www.")
+	// 11. Associate datasource with contact
+	fmt.Println("🔗 Associating datasource with contact...")
+	err = queries.AssociateDatasourceWithContact(ctx, db.AssociateDatasourceWithContactParams{
+		ContactID:    contact.ContactID,
+		DatasourceID: datasource.DatasourceID,
+	})
+	if err != nil {
+		t.Fatalf("Failed to associate datasource with contact: %v", err)
+	}
+	fmt.Println("✅ Associated datasource with contact")
 
-	return hostname == baseHost
+	fmt.Println("✅ Successfully populated database with website content!")
 }
 
-func countPathSegments(path string) int {
-	segments := strings.Split(path, "/")
-	count := 0
-	for _, segment := range segments {
-		if segment != "" {
-			count++
-		}
+// Helper function to generate random strings
+func randomString(n int) string {
+	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[time.Now().UnixNano()%int64(len(letterBytes))]
+		time.Sleep(1 * time.Nanosecond) // To ensure uniqueness
 	}
-	return count
-}
-
-func splitIntoParagraphs(content string) []string {
-	// Basic implementation - in a real scenario, you'd want more sophisticated text processing
-	rawParagraphs := strings.Split(content, "\n\n")
-	var paragraphs []string
-
-	for _, p := range rawParagraphs {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			paragraphs = append(paragraphs, p)
-		}
-	}
-
-	return paragraphs
-}
-
-func extractMainIdea(paragraph string) string {
-	// Simplified implementation - in a real scenario, you'd use NLP techniques
-	words := strings.Fields(paragraph)
-	if len(words) <= 10 {
-		return paragraph
-	}
-
-	// Just take the first 10-15 words as a simple summarization
-	end := 15
-	if len(words) < end {
-		end = len(words)
-	}
-
-	return strings.Join(words[:end], " ") + "..."
-}
-
-func classifyParagraph(paragraph string) string {
-	// Simplified classification based on keyword presence
-	paragraph = strings.ToLower(paragraph)
-
-	if strings.Contains(paragraph, "ai") || strings.Contains(paragraph, "artificial intelligence") {
-		return "AI Technology"
-	} else if strings.Contains(paragraph, "customer") || strings.Contains(paragraph, "service") {
-		return "Customer Service"
-	} else if strings.Contains(paragraph, "platform") || strings.Contains(paragraph, "solution") {
-		return "Product"
-	} else if strings.Contains(paragraph, "integration") || strings.Contains(paragraph, "api") {
-		return "Technical Integration"
-	}
-
-	return "General Information"
+	return string(b)
 }
