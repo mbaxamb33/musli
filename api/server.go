@@ -23,6 +23,8 @@ func (server *Server) Start(address string) error {
 	return server.router.Run(address)
 }
 
+// Update the NewServer function in api/server.go
+
 func NewServer(store *db.Store) *Server {
 	server := &Server{
 		store: store,
@@ -62,6 +64,15 @@ func NewServer(store *db.Store) *Server {
 
 		// Get companies by user ID
 		companyRoutes.GET("/user/:user_id", server.getCompaniesByUser)
+
+		// Company datasources routes
+		companyRoutes.GET("/:id/datasources", server.listCompanyDatasources)
+		companyRoutes.POST("/:id/datasources", server.createCompanyDatasource)
+		companyRoutes.DELETE("/:id/datasources/:datasource_id", server.deleteCompanyDatasource)
+
+		// Company paragraphs routes
+		companyRoutes.GET("/:id/paragraphs", server.listCompanyParagraphs)
+		companyRoutes.GET("/:id/paragraphs/search", server.searchCompanyParagraphs)
 	}
 
 	// Contact API routes
@@ -78,6 +89,30 @@ func NewServer(store *db.Store) *Server {
 
 		// Search contacts by name
 		contactRoutes.GET("/search", server.searchContactsByName)
+
+		// Contact datasources routes
+		contactRoutes.GET("/:id/datasources", server.listContactDatasources)
+		contactRoutes.POST("/:id/datasources", server.createContactDatasource)
+		contactRoutes.DELETE("/:id/datasources/:datasource_id", server.deleteContactDatasource)
+
+		// Contact paragraphs routes
+		contactRoutes.GET("/:id/paragraphs", server.listContactParagraphs)
+		contactRoutes.GET("/:id/paragraphs/search", server.searchContactParagraphs)
+	}
+
+	// Shared file upload endpoint for both companies and contacts
+	router.POST("/api/v1/:entity_type/:id/datasources/upload", server.uploadDatasource)
+
+	// Paragraphs API routes
+	paragraphRoutes := router.Group("/api/v1/paragraphs")
+	{
+		paragraphRoutes.GET("/:id", server.getParagraphByID)
+		paragraphRoutes.POST("/", server.createParagraph)
+		paragraphRoutes.PUT("/:id", server.updateParagraph)
+		paragraphRoutes.DELETE("/:id", server.deleteParagraph)
+
+		// Get paragraphs by datasource ID
+		paragraphRoutes.GET("/datasource/:datasource_id", server.listParagraphsByDatasource)
 	}
 
 	// Add a route to test if the server is up
