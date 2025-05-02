@@ -121,6 +121,7 @@ func NewServer(store *db.Store) *Server {
 			"status": "ok",
 		})
 	})
+	router.POST("/api/v1/datasources/:id/process", server.processDatasourceByID)
 
 	// Assign configured router to server
 	server.router = router
