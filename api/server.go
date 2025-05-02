@@ -115,6 +115,22 @@ func NewServer(store *db.Store) *Server {
 		paragraphRoutes.GET("/datasource/:datasource_id", server.listParagraphsByDatasource)
 	}
 
+	// Add these new routes to the NewServer function in api/server.go
+	// Add below the existing route groups
+
+	// Project API routes
+	projectRoutes := router.Group("/api/v1/projects")
+	{
+		projectRoutes.GET("/", server.listProjects)
+		projectRoutes.GET("/:id", server.getProjectByID)
+		projectRoutes.POST("/", server.createProject)
+		// Project datasources routes
+		projectRoutes.GET("/:project_id/datasources", server.listDatasourcesByProject)
+		projectRoutes.POST("/:project_id/datasources", server.createAndAssociateProjectDatasource)
+		projectRoutes.POST("/:project_id/datasources/associate", server.associateDatasourceWithProject)
+		projectRoutes.DELETE("/:project_id/datasources/:datasource_id", server.removeDatasourceFromProject)
+	}
+
 	// Add a route to test if the server is up
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
