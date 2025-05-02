@@ -51,6 +51,35 @@ func NewServer(store *db.Store) *Server {
 		userRoutes.DELETE("/:id", server.deleteUser)
 	}
 
+	// Company API routes
+	companyRoutes := router.Group("/api/v1/companies")
+	{
+		companyRoutes.GET("/", server.listCompanies)
+		companyRoutes.GET("/:id", server.getCompanyByID)
+		companyRoutes.POST("/", server.createCompany)
+		companyRoutes.PUT("/:id", server.updateCompany)
+		companyRoutes.DELETE("/:id", server.deleteCompany)
+
+		// Get companies by user ID
+		companyRoutes.GET("/user/:user_id", server.getCompaniesByUser)
+	}
+
+	// Contact API routes
+	contactRoutes := router.Group("/api/v1/contacts")
+	{
+		contactRoutes.GET("/", server.listContacts)
+		contactRoutes.GET("/:id", server.getContactByID)
+		contactRoutes.POST("/", server.createContact)
+		contactRoutes.PUT("/:id", server.updateContact)
+		contactRoutes.DELETE("/:id", server.deleteContact)
+
+		// Get contacts by company ID
+		contactRoutes.GET("/company/:company_id", server.listContactsByCompany)
+
+		// Search contacts by name
+		contactRoutes.GET("/search", server.searchContactsByName)
+	}
+
 	// Add a route to test if the server is up
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
