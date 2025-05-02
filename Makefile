@@ -13,5 +13,6 @@ migratedown:
 	migrate -path db/migration/ -database "postgresql://root:secret@localhost:5432/musli?sslmode=disable" -verbose down
 sqlc:
 	sqlc generate
-	
-.PHONY: createdb dropdb postgres stoppostgres migrateup migratedown
+server:
+	go run main.go
+.PHONY: createdb dropdb postgres stoppostgres migrateup migratedown server
