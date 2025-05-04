@@ -81,6 +81,26 @@ func (q *Queries) GetDatasourceByID(ctx context.Context, datasourceID int32) (Ge
 	return i, err
 }
 
+const getFullDatasourceByID = `-- name: GetFullDatasourceByID :one
+SELECT datasource_id, source_type, link, file_data, file_name, created_at
+FROM datasources
+WHERE datasource_id = $1
+`
+
+func (q *Queries) GetFullDatasourceByID(ctx context.Context, datasourceID int32) (Datasource, error) {
+	row := q.db.QueryRowContext(ctx, getFullDatasourceByID, datasourceID)
+	var i Datasource
+	err := row.Scan(
+		&i.DatasourceID,
+		&i.SourceType,
+		&i.Link,
+		&i.FileData,
+		&i.FileName,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listDatasources = `-- name: ListDatasources :many
 SELECT datasource_id, source_type, link, file_name, created_at
 FROM datasources

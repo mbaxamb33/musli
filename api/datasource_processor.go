@@ -6,10 +6,13 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	db "github.com/mbaxamb3/nusli/db/sqlc"
+	docscraper "github.com/mbaxamb3/nusli/document_scraper"
 	"github.com/mbaxamb3/nusli/scraper"
 )
 
@@ -36,8 +39,8 @@ func (server *Server) processDatasourceByID(ctx *gin.Context) {
 		return
 	}
 
-	// Get datasource from database
-	datasource, err := server.store.GetDatasourceByID(ctx, int32(id))
+	// Get basic datasource info first
+	datasourceBasic, err := server.store.GetDatasourceByID(ctx, int32(id))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
@@ -51,15 +54,15 @@ func (server *Server) processDatasourceByID(ctx *gin.Context) {
 	var paragraphCount int
 	var message string
 
-	switch datasource.SourceType {
+	switch datasourceBasic.SourceType {
 	case db.DatasourceTypeWebsite:
 		// Process website using web scraper
-		if !datasource.Link.Valid {
+		if !datasourceBasic.Link.Valid {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Website datasource has no link"})
 			return
 		}
 
-		count, msg, err := processWebsiteDatasource(ctx, server.store, datasource)
+		count, msg, err := processWebsiteDatasource(ctx, server.store, datasourceBasic)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{
 				"error":   "Failed to process website",
@@ -70,24 +73,48 @@ func (server *Server) processDatasourceByID(ctx *gin.Context) {
 		paragraphCount = count
 		message = msg
 
-	case db.DatasourceTypeWordDocument, db.DatasourceTypePdf:
+	case db.DatasourceTypeWordDocument:
+		// Process Word document - need to get the full datasource with file data
+		datasourceFull, err := server.store.GetFullDatasourceByID(ctx, int32(id))
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch full datasource data"})
+			return
+		}
+
+		if !datasourceFull.FileName.Valid {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Word document datasource has no file name"})
+			return
+		}
+
+		count, msg, err := processWordDocumentDatasource(ctx, server.store, datasourceFull)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to process Word document",
+				"details": err.Error(),
+			})
+			return
+		}
+		paragraphCount = count
+		message = msg
+
+	case db.DatasourceTypePdf:
 		// For future implementation
 		ctx.JSON(http.StatusNotImplemented, gin.H{
-			"error": fmt.Sprintf("Processing %s datasources is not yet implemented", datasource.SourceType),
+			"error": fmt.Sprintf("Processing %s datasources is not yet implemented", datasourceBasic.SourceType),
 		})
 		return
 
 	default:
 		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("Processing for datasource type %s is not supported", datasource.SourceType),
+			"error": fmt.Sprintf("Processing for datasource type %s is not supported", datasourceBasic.SourceType),
 		})
 		return
 	}
 
 	// Return success response
 	ctx.JSON(http.StatusOK, processDatasourceResponse{
-		DatasourceID:   datasource.DatasourceID,
-		SourceType:     string(datasource.SourceType),
+		DatasourceID:   datasourceBasic.DatasourceID,
+		SourceType:     string(datasourceBasic.SourceType),
 		ParagraphCount: paragraphCount,
 		Message:        message,
 	})
@@ -132,5 +159,57 @@ func processWebsiteDatasource(ctx *gin.Context, store *db.Store, datasource db.G
 	}
 
 	message := fmt.Sprintf("Successfully extracted %d paragraphs from %s", paragraphCount, link)
+	return paragraphCount, message, nil
+}
+
+// processWordDocumentDatasource processes a Word document datasource
+func processWordDocumentDatasource(ctx *gin.Context, store *db.Store, datasource db.Datasource) (int, string, error) {
+	// Create a temporary file to save the Word document
+	tempDir := os.TempDir()
+	tempFile := filepath.Join(tempDir, fmt.Sprintf("doc_%d_%s", datasource.DatasourceID, datasource.FileName.String))
+
+	// Save file data to temporary file
+	err := os.WriteFile(tempFile, datasource.FileData, 0644)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to save temporary file: %w", err)
+	}
+	defer os.Remove(tempFile) // Clean up
+
+	// Create document scraper
+	docScraper, err := docscraper.NewDocumentScraper(tempFile)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to create document scraper: %w", err)
+	}
+
+	// Extract content
+	err = docScraper.Run()
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to scrape document: %w", err)
+	}
+
+	// Create paragraphs from extracted content
+	paragraphCount := 0
+	for _, item := range docScraper.ContentItems {
+		// Skip items with very short paragraphs
+		if len(item.Paragraph) < 100 {
+			continue
+		}
+
+		// Create paragraph
+		paragraphParams := db.CreateParagraphParams{
+			DatasourceID: datasource.DatasourceID,
+			Title:        sql.NullString{String: item.Title, Valid: item.Title != ""},
+			MainIdea:     sql.NullString{String: "", Valid: false}, // Could implement a summarizer in the future
+			Content:      item.Paragraph,
+		}
+
+		_, err := store.CreateParagraph(ctx, paragraphParams)
+		if err != nil {
+			return paragraphCount, "", fmt.Errorf("failed to create paragraph: %w", err)
+		}
+		paragraphCount++
+	}
+
+	message := fmt.Sprintf("Successfully extracted %d paragraphs from document %s", paragraphCount, datasource.FileName.String)
 	return paragraphCount, message, nil
 }

@@ -26,3 +26,8 @@ LIMIT $2 OFFSET $3;
 -- name: DeleteDatasource :exec
 DELETE FROM datasources
 WHERE datasource_id = $1;
+
+-- name: GetFullDatasourceByID :one
+SELECT datasource_id, source_type, link, file_data, file_name, created_at
+FROM datasources
+WHERE datasource_id = $1;

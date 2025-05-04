@@ -125,10 +125,10 @@ func NewServer(store *db.Store) *Server {
 		projectRoutes.GET("/:id", server.getProjectByID)
 		projectRoutes.POST("/", server.createProject)
 		// Project datasources routes
-		projectRoutes.GET("/:project_id/datasources", server.listDatasourcesByProject)
-		projectRoutes.POST("/:project_id/datasources", server.createAndAssociateProjectDatasource)
-		projectRoutes.POST("/:project_id/datasources/associate", server.associateDatasourceWithProject)
-		projectRoutes.DELETE("/:project_id/datasources/:datasource_id", server.removeDatasourceFromProject)
+		projectRoutes.GET("/:id/datasources", server.listDatasourcesByProject)
+		projectRoutes.POST("/:id/datasources", server.createAndAssociateProjectDatasource)
+		projectRoutes.POST("/:id/datasources/associate", server.associateDatasourceWithProject)
+		projectRoutes.DELETE("/:id/datasources/:datasource_id", server.removeDatasourceFromProject)
 	}
 
 	// Add a route to test if the server is up
