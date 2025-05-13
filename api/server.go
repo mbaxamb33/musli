@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -35,13 +36,24 @@ func NewServer(store *db.Store) *Server {
 
 	// Add CORS middleware
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowAllOrigins: true, // For development only - more permissive
+		// Or specify multiple origins:
+		// AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8000"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// After applying CORS middleware
+	router.Use(cors.New(cors.Config{
+		AllowAllOrigins: true,
+		// ...rest of your config
+	}))
+
+	// Add this log
+	fmt.Println("CORS middleware configured with AllowAllOrigins: true")
 
 	// User API routes
 	userRoutes := router.Group("/api/v1/users")
