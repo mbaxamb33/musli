@@ -19,7 +19,7 @@ type createProjectDatasourceRequest struct {
 // createAndAssociateProjectDatasource handles requests to create a new datasource and associate it with a project
 func (server *Server) createAndAssociateProjectDatasource(ctx *gin.Context) {
 	// Get project ID from URL param
-	projectIDParam := ctx.Param("project_id")
+	projectIDParam := ctx.Param("id")
 	projectID, err := strconv.Atoi(projectIDParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID format"})
@@ -83,7 +83,7 @@ func (server *Server) createAndAssociateProjectDatasource(ctx *gin.Context) {
 // associateDatasourceWithProject handles requests to associate an existing datasource with a project
 func (server *Server) associateDatasourceWithProject(ctx *gin.Context) {
 	// Get project ID from URL param
-	projectIDParam := ctx.Param("project_id")
+	projectIDParam := ctx.Param("id")
 	projectID, err := strconv.Atoi(projectIDParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID format"})
@@ -153,7 +153,7 @@ func (server *Server) associateDatasourceWithProject(ctx *gin.Context) {
 // removeDatasourceFromProject handles requests to remove a datasource association from a project
 func (server *Server) removeDatasourceFromProject(ctx *gin.Context) {
 	// Get project ID and datasource ID from URL params
-	projectIDParam := ctx.Param("project_id")
+	projectIDParam := ctx.Param("id")
 	datasourceIDParam := ctx.Param("datasource_id")
 
 	projectID, err := strconv.Atoi(projectIDParam)
@@ -199,7 +199,7 @@ func (server *Server) removeDatasourceFromProject(ctx *gin.Context) {
 // listDatasourcesByProject handles requests to get all datasources for a specific project
 func (server *Server) listDatasourcesByProject(ctx *gin.Context) {
 	// Get project ID from URL param
-	projectIDParam := ctx.Param("project_id")
+	projectIDParam := ctx.Param("id")
 	projectID, err := strconv.Atoi(projectIDParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID format"})

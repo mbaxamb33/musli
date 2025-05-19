@@ -152,3 +152,24 @@ func (server *Server) listProjects(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, projectResponses)
 }
+
+// deleteProject handles requests to delete a project
+func (server *Server) deleteProject(ctx *gin.Context) {
+	// Get project ID from URL param
+	idParam := ctx.Param("id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID format"})
+		return
+	}
+
+	// Delete project from database
+	err = server.store.DeleteProject(ctx, int32(id))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete project"})
+		return
+	}
+
+	// Return success response
+	ctx.JSON(http.StatusOK, gin.H{"message": "Project deleted successfully"})
+}

@@ -136,6 +136,7 @@ func NewServer(store *db.Store) *Server {
 		projectRoutes.GET("/", server.listProjects)
 		projectRoutes.GET("/:id", server.getProjectByID)
 		projectRoutes.POST("/", server.createProject)
+		projectRoutes.DELETE("/:id", server.deleteProject)
 		// Project datasources routes
 		projectRoutes.GET("/:id/datasources", server.listDatasourcesByProject)
 		projectRoutes.POST("/:id/datasources", server.createAndAssociateProjectDatasource)
