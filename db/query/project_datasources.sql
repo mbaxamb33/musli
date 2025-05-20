@@ -18,7 +18,7 @@ ORDER BY d.created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListProjectsByDatasource :many
-SELECT p.project_id, p.user_id, p.project_name, p.main_idea, p.created_at, p.updated_at
+SELECT p.project_id, p.cognito_sub, p.project_name, p.main_idea, p.created_at, p.updated_at
 FROM projects p
 JOIN project_datasources pd ON p.project_id = pd.project_id
 WHERE pd.datasource_id = $1

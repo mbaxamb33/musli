@@ -7,26 +7,35 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
-    username, password
+    cognito_sub, username, password
 )
-VALUES ($1, $2)
-RETURNING user_id, username, password, created_at
+VALUES ($1, $2, $3)
+RETURNING cognito_sub, username, password, created_at
 `
 
 type CreateUserParams struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	CognitoSub string `json:"cognito_sub"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser, arg.Username, arg.Password)
-	var i User
+type CreateUserRow struct {
+	CognitoSub string       `json:"cognito_sub"`
+	Username   string       `json:"username"`
+	Password   string       `json:"password"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRowContext(ctx, createUser, arg.CognitoSub, arg.Username, arg.Password)
+	var i CreateUserRow
 	err := row.Scan(
-		&i.UserID,
+		&i.CognitoSub,
 		&i.Username,
 		&i.Password,
 		&i.CreatedAt,
@@ -36,25 +45,32 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users
-WHERE user_id = $1
+WHERE cognito_sub = $1
 `
 
-func (q *Queries) DeleteUser(ctx context.Context, userID int32) error {
-	_, err := q.db.ExecContext(ctx, deleteUser, userID)
+func (q *Queries) DeleteUser(ctx context.Context, cognitoSub string) error {
+	_, err := q.db.ExecContext(ctx, deleteUser, cognitoSub)
 	return err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT user_id, username, password, created_at
+SELECT cognito_sub, username, password, created_at
 FROM users
-WHERE user_id = $1
+WHERE cognito_sub = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, userID int32) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUserByID, userID)
-	var i User
+type GetUserByIDRow struct {
+	CognitoSub string       `json:"cognito_sub"`
+	Username   string       `json:"username"`
+	Password   string       `json:"password"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, cognitoSub string) (GetUserByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, cognitoSub)
+	var i GetUserByIDRow
 	err := row.Scan(
-		&i.UserID,
+		&i.CognitoSub,
 		&i.Username,
 		&i.Password,
 		&i.CreatedAt,
@@ -63,16 +79,23 @@ func (q *Queries) GetUserByID(ctx context.Context, userID int32) (User, error) {
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT user_id, username, password, created_at
+SELECT cognito_sub, username, password, created_at
 FROM users
 WHERE username = $1
 `
 
-func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
+type GetUserByUsernameRow struct {
+	CognitoSub string       `json:"cognito_sub"`
+	Username   string       `json:"username"`
+	Password   string       `json:"password"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+}
+
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByUsername, username)
-	var i User
+	var i GetUserByUsernameRow
 	err := row.Scan(
-		&i.UserID,
+		&i.CognitoSub,
 		&i.Username,
 		&i.Password,
 		&i.CreatedAt,
@@ -81,7 +104,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT user_id, username, password, created_at
+SELECT cognito_sub, username, password, created_at
 FROM users
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -92,17 +115,24 @@ type ListUsersParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
+type ListUsersRow struct {
+	CognitoSub string       `json:"cognito_sub"`
+	Username   string       `json:"username"`
+	Password   string       `json:"password"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
 	rows, err := q.db.QueryContext(ctx, listUsers, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListUsersRow
 	for rows.Next() {
-		var i User
+		var i ListUsersRow
 		if err := rows.Scan(
-			&i.UserID,
+			&i.CognitoSub,
 			&i.Username,
 			&i.Password,
 			&i.CreatedAt,
@@ -123,20 +153,27 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 const updateUserPassword = `-- name: UpdateUserPassword :one
 UPDATE users
 SET password = $2
-WHERE user_id = $1
-RETURNING user_id, username, password, created_at
+WHERE cognito_sub = $1
+RETURNING cognito_sub, username, password, created_at
 `
 
 type UpdateUserPasswordParams struct {
-	UserID   int32  `json:"user_id"`
-	Password string `json:"password"`
+	CognitoSub string `json:"cognito_sub"`
+	Password   string `json:"password"`
 }
 
-func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, updateUserPassword, arg.UserID, arg.Password)
-	var i User
+type UpdateUserPasswordRow struct {
+	CognitoSub string       `json:"cognito_sub"`
+	Username   string       `json:"username"`
+	Password   string       `json:"password"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (UpdateUserPasswordRow, error) {
+	row := q.db.QueryRowContext(ctx, updateUserPassword, arg.CognitoSub, arg.Password)
+	var i UpdateUserPasswordRow
 	err := row.Scan(
-		&i.UserID,
+		&i.CognitoSub,
 		&i.Username,
 		&i.Password,
 		&i.CreatedAt,

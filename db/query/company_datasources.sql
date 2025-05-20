@@ -18,7 +18,7 @@ ORDER BY d.created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListCompaniesByDatasource :many
-SELECT c.company_id, c.user_id, c.company_name, c.industry, c.website, c.address, c.description, c.created_at
+SELECT c.company_id, c.cognito_sub, c.company_name, c.industry, c.website, c.address, c.description, c.created_at
 FROM companies c
 JOIN company_datasources cd ON c.company_id = cd.company_id
 WHERE cd.datasource_id = $1

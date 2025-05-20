@@ -46,7 +46,7 @@ func (q *Queries) GetCompanyDatasourceAssociation(ctx context.Context, arg GetCo
 }
 
 const listCompaniesByDatasource = `-- name: ListCompaniesByDatasource :many
-SELECT c.company_id, c.user_id, c.company_name, c.industry, c.website, c.address, c.description, c.created_at
+SELECT c.company_id, c.cognito_sub, c.company_name, c.industry, c.website, c.address, c.description, c.created_at
 FROM companies c
 JOIN company_datasources cd ON c.company_id = cd.company_id
 WHERE cd.datasource_id = $1
@@ -60,18 +60,29 @@ type ListCompaniesByDatasourceParams struct {
 	Offset       int32 `json:"offset"`
 }
 
-func (q *Queries) ListCompaniesByDatasource(ctx context.Context, arg ListCompaniesByDatasourceParams) ([]Company, error) {
+type ListCompaniesByDatasourceRow struct {
+	CompanyID   int32          `json:"company_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) ListCompaniesByDatasource(ctx context.Context, arg ListCompaniesByDatasourceParams) ([]ListCompaniesByDatasourceRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCompaniesByDatasource, arg.DatasourceID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Company
+	var items []ListCompaniesByDatasourceRow
 	for rows.Next() {
-		var i Company
+		var i ListCompaniesByDatasourceRow
 		if err := rows.Scan(
 			&i.CompanyID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.CompanyName,
 			&i.Industry,
 			&i.Website,

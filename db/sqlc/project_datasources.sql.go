@@ -98,7 +98,7 @@ func (q *Queries) ListDatasourcesByProject(ctx context.Context, arg ListDatasour
 }
 
 const listProjectsByDatasource = `-- name: ListProjectsByDatasource :many
-SELECT p.project_id, p.user_id, p.project_name, p.main_idea, p.created_at, p.updated_at
+SELECT p.project_id, p.cognito_sub, p.project_name, p.main_idea, p.created_at, p.updated_at
 FROM projects p
 JOIN project_datasources pd ON p.project_id = pd.project_id
 WHERE pd.datasource_id = $1
@@ -112,18 +112,27 @@ type ListProjectsByDatasourceParams struct {
 	Offset       int32 `json:"offset"`
 }
 
-func (q *Queries) ListProjectsByDatasource(ctx context.Context, arg ListProjectsByDatasourceParams) ([]Project, error) {
+type ListProjectsByDatasourceRow struct {
+	ProjectID   int32          `json:"project_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) ListProjectsByDatasource(ctx context.Context, arg ListProjectsByDatasourceParams) ([]ListProjectsByDatasourceRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProjectsByDatasource, arg.DatasourceID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Project
+	var items []ListProjectsByDatasourceRow
 	for rows.Next() {
-		var i Project
+		var i ListProjectsByDatasourceRow
 		if err := rows.Scan(
 			&i.ProjectID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.ProjectName,
 			&i.MainIdea,
 			&i.CreatedAt,

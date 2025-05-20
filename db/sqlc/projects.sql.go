@@ -12,24 +12,33 @@ import (
 
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
-    user_id, project_name, main_idea
+    cognito_sub, project_name, main_idea
 )
 VALUES ($1, $2, $3)
-RETURNING project_id, user_id, project_name, main_idea, created_at, updated_at
+RETURNING project_id, cognito_sub, project_name, main_idea, created_at, updated_at
 `
 
 type CreateProjectParams struct {
-	UserID      int32          `json:"user_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
 	ProjectName string         `json:"project_name"`
 	MainIdea    sql.NullString `json:"main_idea"`
 }
 
-func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, createProject, arg.UserID, arg.ProjectName, arg.MainIdea)
-	var i Project
+type CreateProjectRow struct {
+	ProjectID   int32          `json:"project_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (CreateProjectRow, error) {
+	row := q.db.QueryRowContext(ctx, createProject, arg.CognitoSub, arg.ProjectName, arg.MainIdea)
+	var i CreateProjectRow
 	err := row.Scan(
 		&i.ProjectID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.ProjectName,
 		&i.MainIdea,
 		&i.CreatedAt,
@@ -49,17 +58,26 @@ func (q *Queries) DeleteProject(ctx context.Context, projectID int32) error {
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT project_id, user_id, project_name, main_idea, created_at, updated_at
+SELECT project_id, cognito_sub, project_name, main_idea, created_at, updated_at
 FROM projects
 WHERE project_id = $1
 `
 
-func (q *Queries) GetProjectByID(ctx context.Context, projectID int32) (Project, error) {
+type GetProjectByIDRow struct {
+	ProjectID   int32          `json:"project_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) GetProjectByID(ctx context.Context, projectID int32) (GetProjectByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getProjectByID, projectID)
-	var i Project
+	var i GetProjectByIDRow
 	err := row.Scan(
 		&i.ProjectID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.ProjectName,
 		&i.MainIdea,
 		&i.CreatedAt,
@@ -68,32 +86,41 @@ func (q *Queries) GetProjectByID(ctx context.Context, projectID int32) (Project,
 	return i, err
 }
 
-const listProjectsByUserID = `-- name: ListProjectsByUserID :many
-SELECT project_id, user_id, project_name, main_idea, created_at, updated_at
+const listProjectsByCognitoSub = `-- name: ListProjectsByCognitoSub :many
+SELECT project_id, cognito_sub, project_name, main_idea, created_at, updated_at
 FROM projects
-WHERE user_id = $1
+WHERE cognito_sub = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
-type ListProjectsByUserIDParams struct {
-	UserID int32 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+type ListProjectsByCognitoSubParams struct {
+	CognitoSub sql.NullString `json:"cognito_sub"`
+	Limit      int32          `json:"limit"`
+	Offset     int32          `json:"offset"`
 }
 
-func (q *Queries) ListProjectsByUserID(ctx context.Context, arg ListProjectsByUserIDParams) ([]Project, error) {
-	rows, err := q.db.QueryContext(ctx, listProjectsByUserID, arg.UserID, arg.Limit, arg.Offset)
+type ListProjectsByCognitoSubRow struct {
+	ProjectID   int32          `json:"project_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) ListProjectsByCognitoSub(ctx context.Context, arg ListProjectsByCognitoSubParams) ([]ListProjectsByCognitoSubRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectsByCognitoSub, arg.CognitoSub, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Project
+	var items []ListProjectsByCognitoSubRow
 	for rows.Next() {
-		var i Project
+		var i ListProjectsByCognitoSubRow
 		if err := rows.Scan(
 			&i.ProjectID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.ProjectName,
 			&i.MainIdea,
 			&i.CreatedAt,
@@ -113,23 +140,32 @@ func (q *Queries) ListProjectsByUserID(ctx context.Context, arg ListProjectsByUs
 }
 
 const searchProjectsByName = `-- name: SearchProjectsByName :many
-SELECT project_id, user_id, project_name, main_idea, created_at, updated_at
+SELECT project_id, cognito_sub, project_name, main_idea, created_at, updated_at
 FROM projects
-WHERE user_id = $1 AND project_name ILIKE '%' || $2 || '%'
+WHERE cognito_sub = $1 AND project_name ILIKE '%' || $2 || '%'
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
 `
 
 type SearchProjectsByNameParams struct {
-	UserID  int32          `json:"user_id"`
-	Column2 sql.NullString `json:"column_2"`
-	Limit   int32          `json:"limit"`
-	Offset  int32          `json:"offset"`
+	CognitoSub sql.NullString `json:"cognito_sub"`
+	Column2    sql.NullString `json:"column_2"`
+	Limit      int32          `json:"limit"`
+	Offset     int32          `json:"offset"`
 }
 
-func (q *Queries) SearchProjectsByName(ctx context.Context, arg SearchProjectsByNameParams) ([]Project, error) {
+type SearchProjectsByNameRow struct {
+	ProjectID   int32          `json:"project_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) SearchProjectsByName(ctx context.Context, arg SearchProjectsByNameParams) ([]SearchProjectsByNameRow, error) {
 	rows, err := q.db.QueryContext(ctx, searchProjectsByName,
-		arg.UserID,
+		arg.CognitoSub,
 		arg.Column2,
 		arg.Limit,
 		arg.Offset,
@@ -138,12 +174,12 @@ func (q *Queries) SearchProjectsByName(ctx context.Context, arg SearchProjectsBy
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Project
+	var items []SearchProjectsByNameRow
 	for rows.Next() {
-		var i Project
+		var i SearchProjectsByNameRow
 		if err := rows.Scan(
 			&i.ProjectID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.ProjectName,
 			&i.MainIdea,
 			&i.CreatedAt,
@@ -168,7 +204,7 @@ SET project_name = $2,
     main_idea = $3,
     updated_at = CURRENT_TIMESTAMP
 WHERE project_id = $1
-RETURNING project_id, user_id, project_name, main_idea, created_at, updated_at
+RETURNING project_id, cognito_sub, project_name, main_idea, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
@@ -177,12 +213,21 @@ type UpdateProjectParams struct {
 	MainIdea    sql.NullString `json:"main_idea"`
 }
 
-func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
+type UpdateProjectRow struct {
+	ProjectID   int32          `json:"project_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (UpdateProjectRow, error) {
 	row := q.db.QueryRowContext(ctx, updateProject, arg.ProjectID, arg.ProjectName, arg.MainIdea)
-	var i Project
+	var i UpdateProjectRow
 	err := row.Scan(
 		&i.ProjectID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.ProjectName,
 		&i.MainIdea,
 		&i.CreatedAt,

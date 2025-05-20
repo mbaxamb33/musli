@@ -7,10 +7,11 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const getProjectsForSalesProcess = `-- name: GetProjectsForSalesProcess :many
-SELECT p.project_id, p.user_id, p.project_name, p.main_idea, p.created_at, p.updated_at
+SELECT p.project_id, p.cognito_sub, p.project_name, p.main_idea, p.created_at, p.updated_at
 FROM projects p
 JOIN sales_process_projects spp ON p.project_id = spp.project_id
 WHERE spp.sales_process_id = $1
@@ -24,18 +25,27 @@ type GetProjectsForSalesProcessParams struct {
 	Offset         int32 `json:"offset"`
 }
 
-func (q *Queries) GetProjectsForSalesProcess(ctx context.Context, arg GetProjectsForSalesProcessParams) ([]Project, error) {
+type GetProjectsForSalesProcessRow struct {
+	ProjectID   int32          `json:"project_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	ProjectName string         `json:"project_name"`
+	MainIdea    sql.NullString `json:"main_idea"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	UpdatedAt   sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) GetProjectsForSalesProcess(ctx context.Context, arg GetProjectsForSalesProcessParams) ([]GetProjectsForSalesProcessRow, error) {
 	rows, err := q.db.QueryContext(ctx, getProjectsForSalesProcess, arg.SalesProcessID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Project
+	var items []GetProjectsForSalesProcessRow
 	for rows.Next() {
-		var i Project
+		var i GetProjectsForSalesProcessRow
 		if err := rows.Scan(
 			&i.ProjectID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.ProjectName,
 			&i.MainIdea,
 			&i.CreatedAt,
@@ -55,7 +65,7 @@ func (q *Queries) GetProjectsForSalesProcess(ctx context.Context, arg GetProject
 }
 
 const getSalesProcessesForProject = `-- name: GetSalesProcessesForProject :many
-SELECT sp.sales_process_id, sp.user_id, sp.contact_id, sp.overall_matching_score, sp.status, sp.created_at, sp.updated_at
+SELECT sp.sales_process_id, sp.cognito_sub, sp.contact_id, sp.overall_matching_score, sp.status, sp.created_at, sp.updated_at
 FROM sales_processes sp
 JOIN sales_process_projects spp ON sp.sales_process_id = spp.sales_process_id
 WHERE spp.project_id = $1
@@ -69,18 +79,28 @@ type GetSalesProcessesForProjectParams struct {
 	Offset    int32 `json:"offset"`
 }
 
-func (q *Queries) GetSalesProcessesForProject(ctx context.Context, arg GetSalesProcessesForProjectParams) ([]SalesProcess, error) {
+type GetSalesProcessesForProjectRow struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) GetSalesProcessesForProject(ctx context.Context, arg GetSalesProcessesForProjectParams) ([]GetSalesProcessesForProjectRow, error) {
 	rows, err := q.db.QueryContext(ctx, getSalesProcessesForProject, arg.ProjectID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SalesProcess
+	var items []GetSalesProcessesForProjectRow
 	for rows.Next() {
-		var i SalesProcess
+		var i GetSalesProcessesForProjectRow
 		if err := rows.Scan(
 			&i.SalesProcessID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.ContactID,
 			&i.OverallMatchingScore,
 			&i.Status,

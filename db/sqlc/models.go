@@ -177,13 +177,13 @@ type AnalysisInput struct {
 
 type Company struct {
 	CompanyID   int32          `json:"company_id"`
-	UserID      int32          `json:"user_id"`
 	CompanyName string         `json:"company_name"`
 	Industry    sql.NullString `json:"industry"`
 	Website     sql.NullString `json:"website"`
 	Address     sql.NullString `json:"address"`
 	Description sql.NullString `json:"description"`
 	CreatedAt   sql.NullTime   `json:"created_at"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
 }
 
 type CompanyDatasource struct {
@@ -274,11 +274,11 @@ type Paragraph struct {
 
 type Project struct {
 	ProjectID   int32          `json:"project_id"`
-	UserID      int32          `json:"user_id"`
 	ProjectName string         `json:"project_name"`
 	MainIdea    sql.NullString `json:"main_idea"`
 	CreatedAt   sql.NullTime   `json:"created_at"`
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
 }
 
 type ProjectDatasource struct {
@@ -298,12 +298,12 @@ type PropositionDraft struct {
 
 type SalesProcess struct {
 	SalesProcessID       int32          `json:"sales_process_id"`
-	UserID               int32          `json:"user_id"`
 	ContactID            int32          `json:"contact_id"`
 	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
 	Status               sql.NullString `json:"status"`
 	CreatedAt            sql.NullTime   `json:"created_at"`
 	UpdatedAt            sql.NullTime   `json:"updated_at"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
 }
 
 type SalesProcessProject struct {
@@ -323,8 +323,8 @@ type Task struct {
 }
 
 type User struct {
-	UserID    int32        `json:"user_id"`
-	Username  string       `json:"username"`
-	Password  string       `json:"password"`
-	CreatedAt sql.NullTime `json:"created_at"`
+	Username   string       `json:"username"`
+	Password   string       `json:"password"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+	CognitoSub string       `json:"cognito_sub"`
 }

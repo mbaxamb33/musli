@@ -12,14 +12,14 @@ import (
 
 const createCompany = `-- name: CreateCompany :one
 INSERT INTO companies (
-    user_id, company_name, industry, website, address, description
+    cognito_sub, company_name, industry, website, address, description
 )
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING company_id, user_id, company_name, industry, website, address, description, created_at
+RETURNING company_id, cognito_sub, company_name, industry, website, address, description, created_at
 `
 
 type CreateCompanyParams struct {
-	UserID      int32          `json:"user_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
 	CompanyName string         `json:"company_name"`
 	Industry    sql.NullString `json:"industry"`
 	Website     sql.NullString `json:"website"`
@@ -27,19 +27,30 @@ type CreateCompanyParams struct {
 	Description sql.NullString `json:"description"`
 }
 
-func (q *Queries) CreateCompany(ctx context.Context, arg CreateCompanyParams) (Company, error) {
+type CreateCompanyRow struct {
+	CompanyID   int32          `json:"company_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) CreateCompany(ctx context.Context, arg CreateCompanyParams) (CreateCompanyRow, error) {
 	row := q.db.QueryRowContext(ctx, createCompany,
-		arg.UserID,
+		arg.CognitoSub,
 		arg.CompanyName,
 		arg.Industry,
 		arg.Website,
 		arg.Address,
 		arg.Description,
 	)
-	var i Company
+	var i CreateCompanyRow
 	err := row.Scan(
 		&i.CompanyID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.CompanyName,
 		&i.Industry,
 		&i.Website,
@@ -60,32 +71,43 @@ func (q *Queries) DeleteCompany(ctx context.Context, companyID int32) error {
 	return err
 }
 
-const getCompaniesByUserID = `-- name: GetCompaniesByUserID :many
-SELECT company_id, user_id, company_name, industry, website, address, description, created_at
+const getCompaniesByCognitoSub = `-- name: GetCompaniesByCognitoSub :many
+SELECT company_id, cognito_sub, company_name, industry, website, address, description, created_at
 FROM companies
-WHERE user_id = $1
+WHERE cognito_sub = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
-type GetCompaniesByUserIDParams struct {
-	UserID int32 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+type GetCompaniesByCognitoSubParams struct {
+	CognitoSub sql.NullString `json:"cognito_sub"`
+	Limit      int32          `json:"limit"`
+	Offset     int32          `json:"offset"`
 }
 
-func (q *Queries) GetCompaniesByUserID(ctx context.Context, arg GetCompaniesByUserIDParams) ([]Company, error) {
-	rows, err := q.db.QueryContext(ctx, getCompaniesByUserID, arg.UserID, arg.Limit, arg.Offset)
+type GetCompaniesByCognitoSubRow struct {
+	CompanyID   int32          `json:"company_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) GetCompaniesByCognitoSub(ctx context.Context, arg GetCompaniesByCognitoSubParams) ([]GetCompaniesByCognitoSubRow, error) {
+	rows, err := q.db.QueryContext(ctx, getCompaniesByCognitoSub, arg.CognitoSub, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Company
+	var items []GetCompaniesByCognitoSubRow
 	for rows.Next() {
-		var i Company
+		var i GetCompaniesByCognitoSubRow
 		if err := rows.Scan(
 			&i.CompanyID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.CompanyName,
 			&i.Industry,
 			&i.Website,
@@ -107,17 +129,28 @@ func (q *Queries) GetCompaniesByUserID(ctx context.Context, arg GetCompaniesByUs
 }
 
 const getCompanyByID = `-- name: GetCompanyByID :one
-SELECT company_id, user_id, company_name, industry, website, address, description, created_at
+SELECT company_id, cognito_sub, company_name, industry, website, address, description, created_at
 FROM companies
 WHERE company_id = $1
 `
 
-func (q *Queries) GetCompanyByID(ctx context.Context, companyID int32) (Company, error) {
+type GetCompanyByIDRow struct {
+	CompanyID   int32          `json:"company_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) GetCompanyByID(ctx context.Context, companyID int32) (GetCompanyByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getCompanyByID, companyID)
-	var i Company
+	var i GetCompanyByIDRow
 	err := row.Scan(
 		&i.CompanyID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.CompanyName,
 		&i.Industry,
 		&i.Website,
@@ -129,17 +162,28 @@ func (q *Queries) GetCompanyByID(ctx context.Context, companyID int32) (Company,
 }
 
 const getCompanyByName = `-- name: GetCompanyByName :one
-SELECT company_id, user_id, company_name, industry, website, address, description, created_at
+SELECT company_id, cognito_sub, company_name, industry, website, address, description, created_at
 FROM companies
 WHERE company_name = $1
 `
 
-func (q *Queries) GetCompanyByName(ctx context.Context, companyName string) (Company, error) {
+type GetCompanyByNameRow struct {
+	CompanyID   int32          `json:"company_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) GetCompanyByName(ctx context.Context, companyName string) (GetCompanyByNameRow, error) {
 	row := q.db.QueryRowContext(ctx, getCompanyByName, companyName)
-	var i Company
+	var i GetCompanyByNameRow
 	err := row.Scan(
 		&i.CompanyID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.CompanyName,
 		&i.Industry,
 		&i.Website,
@@ -151,7 +195,7 @@ func (q *Queries) GetCompanyByName(ctx context.Context, companyName string) (Com
 }
 
 const listCompanies = `-- name: ListCompanies :many
-SELECT company_id, user_id, company_name, industry, website, address, description, created_at
+SELECT company_id, cognito_sub, company_name, industry, website, address, description, created_at
 FROM companies
 ORDER BY company_name ASC
 LIMIT $1 OFFSET $2
@@ -162,18 +206,29 @@ type ListCompaniesParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error) {
+type ListCompaniesRow struct {
+	CompanyID   int32          `json:"company_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]ListCompaniesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCompanies, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Company
+	var items []ListCompaniesRow
 	for rows.Next() {
-		var i Company
+		var i ListCompaniesRow
 		if err := rows.Scan(
 			&i.CompanyID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.CompanyName,
 			&i.Industry,
 			&i.Website,
@@ -202,7 +257,7 @@ SET company_name = $2,
     address = $5,
     description = $6
 WHERE company_id = $1
-RETURNING company_id, user_id, company_name, industry, website, address, description, created_at
+RETURNING company_id, cognito_sub, company_name, industry, website, address, description, created_at
 `
 
 type UpdateCompanyParams struct {
@@ -214,7 +269,18 @@ type UpdateCompanyParams struct {
 	Description sql.NullString `json:"description"`
 }
 
-func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (Company, error) {
+type UpdateCompanyRow struct {
+	CompanyID   int32          `json:"company_id"`
+	CognitoSub  sql.NullString `json:"cognito_sub"`
+	CompanyName string         `json:"company_name"`
+	Industry    sql.NullString `json:"industry"`
+	Website     sql.NullString `json:"website"`
+	Address     sql.NullString `json:"address"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (UpdateCompanyRow, error) {
 	row := q.db.QueryRowContext(ctx, updateCompany,
 		arg.CompanyID,
 		arg.CompanyName,
@@ -223,10 +289,10 @@ func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (C
 		arg.Address,
 		arg.Description,
 	)
-	var i Company
+	var i UpdateCompanyRow
 	err := row.Scan(
 		&i.CompanyID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.CompanyName,
 		&i.Industry,
 		&i.Website,

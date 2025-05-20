@@ -12,30 +12,40 @@ import (
 
 const createSalesProcess = `-- name: CreateSalesProcess :one
 INSERT INTO sales_processes (
-    user_id, contact_id, overall_matching_score, status
+    cognito_sub, contact_id, overall_matching_score, status
 )
 VALUES ($1, $2, $3, $4)
-RETURNING sales_process_id, user_id, contact_id, overall_matching_score, status, created_at, updated_at
+RETURNING sales_process_id, cognito_sub, contact_id, overall_matching_score, status, created_at, updated_at
 `
 
 type CreateSalesProcessParams struct {
-	UserID               int32          `json:"user_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
 	ContactID            int32          `json:"contact_id"`
 	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
 	Status               sql.NullString `json:"status"`
 }
 
-func (q *Queries) CreateSalesProcess(ctx context.Context, arg CreateSalesProcessParams) (SalesProcess, error) {
+type CreateSalesProcessRow struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) CreateSalesProcess(ctx context.Context, arg CreateSalesProcessParams) (CreateSalesProcessRow, error) {
 	row := q.db.QueryRowContext(ctx, createSalesProcess,
-		arg.UserID,
+		arg.CognitoSub,
 		arg.ContactID,
 		arg.OverallMatchingScore,
 		arg.Status,
 	)
-	var i SalesProcess
+	var i CreateSalesProcessRow
 	err := row.Scan(
 		&i.SalesProcessID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.ContactID,
 		&i.OverallMatchingScore,
 		&i.Status,
@@ -56,17 +66,27 @@ func (q *Queries) DeleteSalesProcess(ctx context.Context, salesProcessID int32) 
 }
 
 const getSalesProcessByID = `-- name: GetSalesProcessByID :one
-SELECT sales_process_id, user_id, contact_id, overall_matching_score, status, created_at, updated_at
+SELECT sales_process_id, cognito_sub, contact_id, overall_matching_score, status, created_at, updated_at
 FROM sales_processes
 WHERE sales_process_id = $1
 `
 
-func (q *Queries) GetSalesProcessByID(ctx context.Context, salesProcessID int32) (SalesProcess, error) {
+type GetSalesProcessByIDRow struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) GetSalesProcessByID(ctx context.Context, salesProcessID int32) (GetSalesProcessByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getSalesProcessByID, salesProcessID)
-	var i SalesProcess
+	var i GetSalesProcessByIDRow
 	err := row.Scan(
 		&i.SalesProcessID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.ContactID,
 		&i.OverallMatchingScore,
 		&i.Status,
@@ -76,8 +96,63 @@ func (q *Queries) GetSalesProcessByID(ctx context.Context, salesProcessID int32)
 	return i, err
 }
 
+const listSalesProcessesByCognitoSub = `-- name: ListSalesProcessesByCognitoSub :many
+SELECT sales_process_id, cognito_sub, contact_id, overall_matching_score, status, created_at, updated_at
+FROM sales_processes
+WHERE cognito_sub = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListSalesProcessesByCognitoSubParams struct {
+	CognitoSub sql.NullString `json:"cognito_sub"`
+	Limit      int32          `json:"limit"`
+	Offset     int32          `json:"offset"`
+}
+
+type ListSalesProcessesByCognitoSubRow struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) ListSalesProcessesByCognitoSub(ctx context.Context, arg ListSalesProcessesByCognitoSubParams) ([]ListSalesProcessesByCognitoSubRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSalesProcessesByCognitoSub, arg.CognitoSub, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSalesProcessesByCognitoSubRow
+	for rows.Next() {
+		var i ListSalesProcessesByCognitoSubRow
+		if err := rows.Scan(
+			&i.SalesProcessID,
+			&i.CognitoSub,
+			&i.ContactID,
+			&i.OverallMatchingScore,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSalesProcessesByContact = `-- name: ListSalesProcessesByContact :many
-SELECT sales_process_id, user_id, contact_id, overall_matching_score, status, created_at, updated_at
+SELECT sales_process_id, cognito_sub, contact_id, overall_matching_score, status, created_at, updated_at
 FROM sales_processes
 WHERE contact_id = $1
 ORDER BY created_at DESC
@@ -90,18 +165,28 @@ type ListSalesProcessesByContactParams struct {
 	Offset    int32 `json:"offset"`
 }
 
-func (q *Queries) ListSalesProcessesByContact(ctx context.Context, arg ListSalesProcessesByContactParams) ([]SalesProcess, error) {
+type ListSalesProcessesByContactRow struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) ListSalesProcessesByContact(ctx context.Context, arg ListSalesProcessesByContactParams) ([]ListSalesProcessesByContactRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSalesProcessesByContact, arg.ContactID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SalesProcess
+	var items []ListSalesProcessesByContactRow
 	for rows.Next() {
-		var i SalesProcess
+		var i ListSalesProcessesByContactRow
 		if err := rows.Scan(
 			&i.SalesProcessID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.ContactID,
 			&i.OverallMatchingScore,
 			&i.Status,
@@ -122,23 +207,33 @@ func (q *Queries) ListSalesProcessesByContact(ctx context.Context, arg ListSales
 }
 
 const listSalesProcessesByStatus = `-- name: ListSalesProcessesByStatus :many
-SELECT sales_process_id, user_id, contact_id, overall_matching_score, status, created_at, updated_at
+SELECT sales_process_id, cognito_sub, contact_id, overall_matching_score, status, created_at, updated_at
 FROM sales_processes
-WHERE user_id = $1 AND status = $2
+WHERE cognito_sub = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
 `
 
 type ListSalesProcessesByStatusParams struct {
-	UserID int32          `json:"user_id"`
-	Status sql.NullString `json:"status"`
-	Limit  int32          `json:"limit"`
-	Offset int32          `json:"offset"`
+	CognitoSub sql.NullString `json:"cognito_sub"`
+	Status     sql.NullString `json:"status"`
+	Limit      int32          `json:"limit"`
+	Offset     int32          `json:"offset"`
 }
 
-func (q *Queries) ListSalesProcessesByStatus(ctx context.Context, arg ListSalesProcessesByStatusParams) ([]SalesProcess, error) {
+type ListSalesProcessesByStatusRow struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) ListSalesProcessesByStatus(ctx context.Context, arg ListSalesProcessesByStatusParams) ([]ListSalesProcessesByStatusRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSalesProcessesByStatus,
-		arg.UserID,
+		arg.CognitoSub,
 		arg.Status,
 		arg.Limit,
 		arg.Offset,
@@ -147,57 +242,12 @@ func (q *Queries) ListSalesProcessesByStatus(ctx context.Context, arg ListSalesP
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SalesProcess
+	var items []ListSalesProcessesByStatusRow
 	for rows.Next() {
-		var i SalesProcess
+		var i ListSalesProcessesByStatusRow
 		if err := rows.Scan(
 			&i.SalesProcessID,
-			&i.UserID,
-			&i.ContactID,
-			&i.OverallMatchingScore,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSalesProcessesByUser = `-- name: ListSalesProcessesByUser :many
-SELECT sales_process_id, user_id, contact_id, overall_matching_score, status, created_at, updated_at
-FROM sales_processes
-WHERE user_id = $1
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
-`
-
-type ListSalesProcessesByUserParams struct {
-	UserID int32 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-func (q *Queries) ListSalesProcessesByUser(ctx context.Context, arg ListSalesProcessesByUserParams) ([]SalesProcess, error) {
-	rows, err := q.db.QueryContext(ctx, listSalesProcessesByUser, arg.UserID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SalesProcess
-	for rows.Next() {
-		var i SalesProcess
-		if err := rows.Scan(
-			&i.SalesProcessID,
-			&i.UserID,
+			&i.CognitoSub,
 			&i.ContactID,
 			&i.OverallMatchingScore,
 			&i.Status,
@@ -223,7 +273,7 @@ SET overall_matching_score = $2,
     status = $3,
     updated_at = CURRENT_TIMESTAMP
 WHERE sales_process_id = $1
-RETURNING sales_process_id, user_id, contact_id, overall_matching_score, status, created_at, updated_at
+RETURNING sales_process_id, cognito_sub, contact_id, overall_matching_score, status, created_at, updated_at
 `
 
 type UpdateSalesProcessParams struct {
@@ -232,12 +282,22 @@ type UpdateSalesProcessParams struct {
 	Status               sql.NullString `json:"status"`
 }
 
-func (q *Queries) UpdateSalesProcess(ctx context.Context, arg UpdateSalesProcessParams) (SalesProcess, error) {
+type UpdateSalesProcessRow struct {
+	SalesProcessID       int32          `json:"sales_process_id"`
+	CognitoSub           sql.NullString `json:"cognito_sub"`
+	ContactID            int32          `json:"contact_id"`
+	OverallMatchingScore sql.NullString `json:"overall_matching_score"`
+	Status               sql.NullString `json:"status"`
+	CreatedAt            sql.NullTime   `json:"created_at"`
+	UpdatedAt            sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) UpdateSalesProcess(ctx context.Context, arg UpdateSalesProcessParams) (UpdateSalesProcessRow, error) {
 	row := q.db.QueryRowContext(ctx, updateSalesProcess, arg.SalesProcessID, arg.OverallMatchingScore, arg.Status)
-	var i SalesProcess
+	var i UpdateSalesProcessRow
 	err := row.Scan(
 		&i.SalesProcessID,
-		&i.UserID,
+		&i.CognitoSub,
 		&i.ContactID,
 		&i.OverallMatchingScore,
 		&i.Status,
