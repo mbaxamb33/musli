@@ -18,7 +18,7 @@ type createProjectRequest struct {
 // projectResponse represents the API response structure for project data
 type projectResponse struct {
 	ProjectID   int32  `json:"project_id"`
-	UserID      int32  `json:"user_id"`
+	CognitoSub  string `json:"cognito_sub,omitempty"`
 	ProjectName string `json:"project_name"`
 	MainIdea    string `json:"main_idea,omitempty"`
 	CreatedAt   string `json:"created_at,omitempty"`
@@ -26,7 +26,7 @@ type projectResponse struct {
 }
 
 // convertProjectToResponse converts a database project model to an API response
-func convertProjectToResponse(project db.Project) projectResponse {
+func convertProjectToResponse(project db.GetProjectByIDRow) projectResponse {
 	createdAt := ""
 	if project.CreatedAt.Valid {
 		createdAt = project.CreatedAt.Time.Format("2006-01-02T15:04:05Z")
@@ -42,9 +42,46 @@ func convertProjectToResponse(project db.Project) projectResponse {
 		mainIdea = project.MainIdea.String
 	}
 
+	cognitoSub := ""
+	if project.CognitoSub.Valid {
+		cognitoSub = project.CognitoSub.String
+	}
+
 	return projectResponse{
 		ProjectID:   project.ProjectID,
-		UserID:      project.UserID,
+		CognitoSub:  cognitoSub,
+		ProjectName: project.ProjectName,
+		MainIdea:    mainIdea,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+	}
+}
+
+// convertProjectCognitoToResponse handles the ListProjectsByCognitoSub results
+func convertProjectCognitoToResponse(project db.ListProjectsByCognitoSubRow) projectResponse {
+	createdAt := ""
+	if project.CreatedAt.Valid {
+		createdAt = project.CreatedAt.Time.Format("2006-01-02T15:04:05Z")
+	}
+
+	updatedAt := ""
+	if project.UpdatedAt.Valid {
+		updatedAt = project.UpdatedAt.Time.Format("2006-01-02T15:04:05Z")
+	}
+
+	mainIdea := ""
+	if project.MainIdea.Valid {
+		mainIdea = project.MainIdea.String
+	}
+
+	cognitoSub := ""
+	if project.CognitoSub.Valid {
+		cognitoSub = project.CognitoSub.String
+	}
+
+	return projectResponse{
+		ProjectID:   project.ProjectID,
+		CognitoSub:  cognitoSub,
 		ProjectName: project.ProjectName,
 		MainIdea:    mainIdea,
 		CreatedAt:   createdAt,
@@ -60,13 +97,13 @@ func (server *Server) createProject(ctx *gin.Context) {
 		return
 	}
 
-	// Get user ID from authentication context or default to a test user
+	// Get cognito_sub from authentication context
 	// In a real application, you would get this from authenticated user
-	userID := int32(1) // TODO: Replace with actual authenticated user ID
+	cognitoSub := "default_cognito_sub" // TODO: Replace with actual authenticated user's cognito_sub
 
 	// Convert request to database params
 	arg := db.CreateProjectParams{
-		UserID:      userID,
+		CognitoSub:  sql.NullString{String: cognitoSub, Valid: true},
 		ProjectName: req.ProjectName,
 		MainIdea:    sql.NullString{String: req.MainIdea, Valid: req.MainIdea != ""},
 	}
@@ -79,7 +116,15 @@ func (server *Server) createProject(ctx *gin.Context) {
 	}
 
 	// Return created project as response
-	ctx.JSON(http.StatusCreated, convertProjectToResponse(project))
+	response := projectResponse{
+		ProjectID:   project.ProjectID,
+		CognitoSub:  cognitoSub,
+		ProjectName: project.ProjectName,
+		MainIdea:    req.MainIdea,
+		CreatedAt:   project.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:   project.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
+	}
+	ctx.JSON(http.StatusCreated, response)
 }
 
 // getProjectByID handles requests to get a specific project
@@ -109,9 +154,9 @@ func (server *Server) getProjectByID(ctx *gin.Context) {
 
 // listProjects handles requests to get projects for a user with pagination
 func (server *Server) listProjects(ctx *gin.Context) {
-	// Get user ID from authentication context or default to a test user
+	// Get cognito_sub from authentication context
 	// In a real application, you would get this from authenticated user
-	userID := int32(1) // TODO: Replace with actual authenticated user ID
+	cognitoSub := "default_cognito_sub" // TODO: Replace with actual authenticated user's cognito_sub
 
 	// Default pagination settings
 	limit := 10
@@ -134,10 +179,10 @@ func (server *Server) listProjects(ctx *gin.Context) {
 	}
 
 	// Get projects from database
-	projects, err := server.store.ListProjectsByUserID(ctx, db.ListProjectsByUserIDParams{
-		UserID: userID,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+	projects, err := server.store.ListProjectsByCognitoSub(ctx, db.ListProjectsByCognitoSubParams{
+		CognitoSub: sql.NullString{String: cognitoSub, Valid: true},
+		Limit:      int32(limit),
+		Offset:     int32(offset),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
@@ -147,7 +192,7 @@ func (server *Server) listProjects(ctx *gin.Context) {
 	// Convert projects to response format
 	projectResponses := make([]projectResponse, len(projects))
 	for i, project := range projects {
-		projectResponses[i] = convertProjectToResponse(project)
+		projectResponses[i] = convertProjectCognitoToResponse(project)
 	}
 
 	ctx.JSON(http.StatusOK, projectResponses)

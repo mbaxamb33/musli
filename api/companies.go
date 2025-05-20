@@ -22,7 +22,7 @@ type createCompanyRequest struct {
 // companyResponse represents the API response structure for company data
 type companyResponse struct {
 	CompanyID   int32     `json:"company_id"`
-	UserID      int32     `json:"user_id"`
+	CognitoSub  string    `json:"cognito_sub,omitempty"`
 	CompanyName string    `json:"company_name"`
 	Industry    string    `json:"industry,omitempty"`
 	Website     string    `json:"website,omitempty"`
@@ -41,7 +41,7 @@ type updateCompanyRequest struct {
 }
 
 // convertCompanyToResponse converts a database company model to an API response
-func convertCompanyToResponse(company db.Company) companyResponse {
+func convertCompanyToResponse(company db.GetCompanyByIDRow) companyResponse {
 	createdAt := time.Time{}
 	if company.CreatedAt.Valid {
 		createdAt = company.CreatedAt.Time
@@ -68,9 +68,104 @@ func convertCompanyToResponse(company db.Company) companyResponse {
 		description = company.Description.String
 	}
 
+	cognitoSub := ""
+	if company.CognitoSub.Valid {
+		cognitoSub = company.CognitoSub.String
+	}
+
 	return companyResponse{
 		CompanyID:   company.CompanyID,
-		UserID:      company.UserID,
+		CognitoSub:  cognitoSub,
+		CompanyName: company.CompanyName,
+		Industry:    industry,
+		Website:     website,
+		Address:     address,
+		Description: description,
+		CreatedAt:   createdAt,
+	}
+}
+
+// Function overload to handle different company struct types
+func convertCompanyListToResponse(company db.ListCompaniesRow) companyResponse {
+	createdAt := time.Time{}
+	if company.CreatedAt.Valid {
+		createdAt = company.CreatedAt.Time
+	}
+
+	// Convert SQL null strings to regular strings
+	industry := ""
+	if company.Industry.Valid {
+		industry = company.Industry.String
+	}
+
+	website := ""
+	if company.Website.Valid {
+		website = company.Website.String
+	}
+
+	address := ""
+	if company.Address.Valid {
+		address = company.Address.String
+	}
+
+	description := ""
+	if company.Description.Valid {
+		description = company.Description.String
+	}
+
+	cognitoSub := ""
+	if company.CognitoSub.Valid {
+		cognitoSub = company.CognitoSub.String
+	}
+
+	return companyResponse{
+		CompanyID:   company.CompanyID,
+		CognitoSub:  cognitoSub,
+		CompanyName: company.CompanyName,
+		Industry:    industry,
+		Website:     website,
+		Address:     address,
+		Description: description,
+		CreatedAt:   createdAt,
+	}
+}
+
+// Function overload to handle cognito sub company rows
+func convertCompanyCognitoToResponse(company db.GetCompaniesByCognitoSubRow) companyResponse {
+	createdAt := time.Time{}
+	if company.CreatedAt.Valid {
+		createdAt = company.CreatedAt.Time
+	}
+
+	// Convert SQL null strings to regular strings
+	industry := ""
+	if company.Industry.Valid {
+		industry = company.Industry.String
+	}
+
+	website := ""
+	if company.Website.Valid {
+		website = company.Website.String
+	}
+
+	address := ""
+	if company.Address.Valid {
+		address = company.Address.String
+	}
+
+	description := ""
+	if company.Description.Valid {
+		description = company.Description.String
+	}
+
+	cognitoSub := ""
+	if company.CognitoSub.Valid {
+		cognitoSub = company.CognitoSub.String
+	}
+
+	return companyResponse{
+		CompanyID:   company.CompanyID,
+		CognitoSub:  cognitoSub,
 		CompanyName: company.CompanyName,
 		Industry:    industry,
 		Website:     website,
@@ -88,13 +183,13 @@ func (server *Server) createCompany(ctx *gin.Context) {
 		return
 	}
 
-	// Get user ID from authentication context or default to a test user
+	// Get cognito_sub from authentication context
 	// In a real application, you would get this from authenticated user
-	userID := int32(1) // TODO: Replace with actual authenticated user ID
+	cognitoSub := "default_cognito_sub" // TODO: Replace with actual authenticated user's cognito_sub
 
 	// Convert request to database params
 	arg := db.CreateCompanyParams{
-		UserID:      userID,
+		CognitoSub:  sql.NullString{String: cognitoSub, Valid: true},
 		CompanyName: req.CompanyName,
 		Industry:    sql.NullString{String: req.Industry, Valid: req.Industry != ""},
 		Website:     sql.NullString{String: req.Website, Valid: req.Website != ""},
@@ -110,7 +205,17 @@ func (server *Server) createCompany(ctx *gin.Context) {
 	}
 
 	// Return created company as response
-	ctx.JSON(http.StatusCreated, convertCompanyToResponse(company))
+	result := companyResponse{
+		CompanyID:   company.CompanyID,
+		CognitoSub:  cognitoSub,
+		CompanyName: company.CompanyName,
+		Industry:    req.Industry,
+		Website:     req.Website,
+		Address:     req.Address,
+		Description: req.Description,
+		CreatedAt:   company.CreatedAt.Time,
+	}
+	ctx.JSON(http.StatusCreated, result)
 }
 
 // getCompanyByID handles requests to get a specific company
@@ -173,7 +278,7 @@ func (server *Server) listCompanies(ctx *gin.Context) {
 	// Convert companies to response format
 	companyResponses := make([]companyResponse, len(companies))
 	for i, company := range companies {
-		companyResponses[i] = convertCompanyToResponse(company)
+		companyResponses[i] = convertCompanyListToResponse(company)
 	}
 
 	ctx.JSON(http.StatusOK, companyResponses)
@@ -181,13 +286,8 @@ func (server *Server) listCompanies(ctx *gin.Context) {
 
 // getCompaniesByUser handles requests to get companies for a specific user
 func (server *Server) getCompaniesByUser(ctx *gin.Context) {
-	// Get user ID from URL param
-	userIDParam := ctx.Param("user_id")
-	userID, err := strconv.Atoi(userIDParam)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
-		return
-	}
+	// Get cognito_sub from URL param
+	cognitoSub := ctx.Param("cognito_sub")
 
 	// Default pagination settings
 	limit := 10
@@ -198,6 +298,7 @@ func (server *Server) getCompaniesByUser(ctx *gin.Context) {
 	offsetParam := ctx.DefaultQuery("offset", "0")
 
 	// Convert string params to integers
+	var err error
 	limit, err = strconv.Atoi(limitParam)
 	if err != nil || limit < 1 {
 		limit = 10
@@ -209,10 +310,10 @@ func (server *Server) getCompaniesByUser(ctx *gin.Context) {
 	}
 
 	// Get companies from database
-	companies, err := server.store.GetCompaniesByUserID(ctx, db.GetCompaniesByUserIDParams{
-		UserID: int32(userID),
-		Limit:  int32(limit),
-		Offset: int32(offset),
+	companies, err := server.store.GetCompaniesByCognitoSub(ctx, db.GetCompaniesByCognitoSubParams{
+		CognitoSub: sql.NullString{String: cognitoSub, Valid: true},
+		Limit:      int32(limit),
+		Offset:     int32(offset),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch companies"})
@@ -222,7 +323,7 @@ func (server *Server) getCompaniesByUser(ctx *gin.Context) {
 	// Convert companies to response format
 	companyResponses := make([]companyResponse, len(companies))
 	for i, company := range companies {
-		companyResponses[i] = convertCompanyToResponse(company)
+		companyResponses[i] = convertCompanyCognitoToResponse(company)
 	}
 
 	ctx.JSON(http.StatusOK, companyResponses)
@@ -273,7 +374,17 @@ func (server *Server) updateCompany(ctx *gin.Context) {
 	}
 
 	// Return updated company
-	ctx.JSON(http.StatusOK, convertCompanyToResponse(company))
+	response := companyResponse{
+		CompanyID:   company.CompanyID,
+		CompanyName: company.CompanyName,
+		CognitoSub:  company.CognitoSub.String,
+		Industry:    req.Industry,
+		Website:     req.Website,
+		Address:     req.Address,
+		Description: req.Description,
+		CreatedAt:   company.CreatedAt.Time,
+	}
+	ctx.JSON(http.StatusOK, response)
 }
 
 // deleteCompany handles requests to delete a company

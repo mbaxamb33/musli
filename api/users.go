@@ -12,15 +12,16 @@ import (
 
 // userResponse represents the API response structure for user data
 type userResponse struct {
-	UserID    int32     `json:"user_id"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
+	CognitoSub string    `json:"cognito_sub"`
+	Username   string    `json:"username"`
+	CreatedAt  time.Time `json:"created_at,omitempty"`
 }
 
 // createUserRequest represents the request body for creating a user
 type createUserRequest struct {
-	Username string `json:"username" binding:"required,alphanum,min=3,max=30"`
-	Password string `json:"password" binding:"required,min=6"`
+	CognitoSub string `json:"cognito_sub" binding:"required"`
+	Username   string `json:"username" binding:"required,alphanum,min=3,max=30"`
+	Password   string `json:"password" binding:"required,min=6"`
 }
 
 // updateUserRequest represents the request body for updating a user
@@ -36,9 +37,9 @@ func convertUserToResponse(user db.User) userResponse {
 	}
 
 	return userResponse{
-		UserID:    user.UserID,
-		Username:  user.Username,
-		CreatedAt: createdAt,
+		CognitoSub: user.CognitoSub,
+		Username:   user.Username,
+		CreatedAt:  createdAt,
 	}
 }
 
@@ -85,16 +86,13 @@ func (server *Server) getUsers(ctx *gin.Context) {
 
 // getUserByID handles requests to get a specific user
 func (server *Server) getUserByID(ctx *gin.Context) {
-	// Get user ID from URL param
-	idParam := ctx.Param("id")
-	id, err := strconv.Atoi(idParam)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
-		return
-	}
+	// Get cognito_sub from URL param
+	cognitoSub := ctx.Param("cognito_sub")
+
+	// No need to convert to integer, keep as string
 
 	// Get user from database using the store
-	user, err := server.store.GetUserByID(ctx, int32(id))
+	user, err := server.store.GetUserByID(ctx, cognitoSub)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -132,8 +130,9 @@ func (server *Server) createUser(ctx *gin.Context) {
 	// Create user in database
 	// Note: In a real application, you would hash the password here
 	user, err := server.store.CreateUser(ctx, db.CreateUserParams{
-		Username: req.Username,
-		Password: req.Password, // This should be hashed in a real application
+		CognitoSub: req.CognitoSub,
+		Username:   req.Username,
+		Password:   req.Password, // This should be hashed in a real application
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
@@ -146,13 +145,10 @@ func (server *Server) createUser(ctx *gin.Context) {
 
 // updateUser handles requests to update an existing user
 func (server *Server) updateUser(ctx *gin.Context) {
-	// Get user ID from URL param
-	idParam := ctx.Param("id")
-	id, err := strconv.Atoi(idParam)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
-		return
-	}
+	// Get cognito_sub from URL param
+	cognitoSub := ctx.Param("cognito_sub")
+
+	// No need to convert to integer, keep as string
 
 	// Parse request body
 	var req updateUserRequest
@@ -162,7 +158,7 @@ func (server *Server) updateUser(ctx *gin.Context) {
 	}
 
 	// Check if user exists
-	_, err = server.store.GetUserByID(ctx, int32(id))
+	_, err := server.store.GetUserByID(ctx, cognitoSub)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -175,8 +171,8 @@ func (server *Server) updateUser(ctx *gin.Context) {
 	// Update user password
 	// Note: In a real application, you would hash the password here
 	user, err := server.store.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
-		UserID:   int32(id),
-		Password: req.Password, // This should be hashed in a real application
+		CognitoSub: cognitoSub,
+		Password:   req.Password, // This should be hashed in a real application
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
@@ -189,16 +185,13 @@ func (server *Server) updateUser(ctx *gin.Context) {
 
 // deleteUser handles requests to delete a user
 func (server *Server) deleteUser(ctx *gin.Context) {
-	// Get user ID from URL param
-	idParam := ctx.Param("id")
-	id, err := strconv.Atoi(idParam)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
-		return
-	}
+	// Get cognito_sub from URL param
+	cognitoSub := ctx.Param("cognito_sub")
+
+	// No need to convert to integer, keep as string
 
 	// Check if user exists
-	_, err = server.store.GetUserByID(ctx, int32(id))
+	_, err := server.store.GetUserByID(ctx, cognitoSub)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -209,7 +202,7 @@ func (server *Server) deleteUser(ctx *gin.Context) {
 	}
 
 	// Delete user
-	err = server.store.DeleteUser(ctx, int32(id))
+	err = server.store.DeleteUser(ctx, cognitoSub)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
 		return
