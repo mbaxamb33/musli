@@ -31,6 +31,13 @@ type processDatasourceResponse struct {
 
 // processDatasourceByID handles processing a specific datasource and generating paragraphs
 func (server *Server) processDatasourceByID(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	_, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get datasource ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -49,6 +56,17 @@ func (server *Server) processDatasourceByID(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch datasource"})
 		return
 	}
+
+	// // Verify that the user has access to this datasource
+	// hasAccess, err := server.userHasAccessToDatasource(ctx, int32(id), cognitoSub.(string))
+	// if err != nil {
+	// 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify datasource access"})
+	// 	return
+	// }
+	// if !hasAccess {
+	// 	ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to process this datasource"})
+	// 	return
+	// }
 
 	// Process based on datasource type
 	var paragraphCount int

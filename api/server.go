@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -14,13 +16,6 @@ import (
 	"github.com/mbaxamb3/nusli/middleware"
 	"golang.org/x/oauth2"
 )
-
-// // Global variables for authentication
-// var (
-// 	provider      *oidc.Provider
-// 	oauth2Config  oauth2.Config
-// 	cognitoClient *cognitoidentityprovider.Client
-// )
 
 // Hardcoded AWS Cognito configuration
 const (
@@ -131,7 +126,7 @@ func NewServer(store *db.Store) *Server {
 		userRoutes.POST("/", server.createUser)
 		userRoutes.PUT("/:cognito_sub", server.updateUser)    // Changed from :id to :cognito_sub
 		userRoutes.DELETE("/:cognito_sub", server.deleteUser) // Changed from :id to :cognito_sub
-		userRoutes.GET("/me", server.getCurrentUser)          // New endpoint to get current user
+		userRoutes.GET("/me", server.getCurrentUser)          // Enabled endpoint to get current user
 	}
 
 	// Company API routes
@@ -218,26 +213,26 @@ func NewServer(store *db.Store) *Server {
 	return server
 }
 
-// // getCurrentUser returns the authenticated user's details
-// func (server *Server) getCurrentUser(ctx *gin.Context) {
-// 	// Get the cognito_sub from the context (added by middleware)
-// 	cognitoSub, exists := ctx.Get("cognito_sub")
-// 	if !exists {
-// 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
-// 		return
-// 	}
+// getCurrentUser returns the authenticated user's details
+func (server *Server) getCurrentUser(ctx *gin.Context) {
+	// Get the cognito_sub from the context (added by middleware)
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
 
-// 	// Fetch user information from the database
-// 	user, err := server.store.GetUserByCognitoSub(ctx, cognitoSub.(string))
-// 	if err != nil {
-// 		if err == sql.ErrNoRows {
-// 			ctx.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-// 			return
-// 		}
-// 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user data"})
-// 		return
-// 	}
+	// Fetch user information from the database
+	user, err := server.store.GetUserByID(ctx, cognitoSub.(string))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user data"})
+		return
+	}
 
-// 	// Return user data
-// 	ctx.JSON(http.StatusOK, user)
-// }
+	// Return user data using the appropriate conversion function
+	ctx.JSON(http.StatusOK, convertGetUserRowToResponse(user))
+}

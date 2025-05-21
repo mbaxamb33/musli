@@ -29,7 +29,65 @@ type updateUserRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }
 
-// convertUserToResponse converts a database user model to an API response
+// Convert different user struct types to the consistent userResponse format
+
+// convertListUserRowToResponse converts a ListUsersRow to userResponse
+func convertListUserRowToResponse(user db.ListUsersRow) userResponse {
+	createdAt := time.Time{}
+	if user.CreatedAt.Valid {
+		createdAt = user.CreatedAt.Time
+	}
+
+	return userResponse{
+		CognitoSub: user.CognitoSub,
+		Username:   user.Username,
+		CreatedAt:  createdAt,
+	}
+}
+
+// convertGetUserRowToResponse converts a GetUserByIDRow to userResponse
+func convertGetUserRowToResponse(user db.GetUserByIDRow) userResponse {
+	createdAt := time.Time{}
+	if user.CreatedAt.Valid {
+		createdAt = user.CreatedAt.Time
+	}
+
+	return userResponse{
+		CognitoSub: user.CognitoSub,
+		Username:   user.Username,
+		CreatedAt:  createdAt,
+	}
+}
+
+// convertCreateUserRowToResponse converts a CreateUserRow to userResponse
+func convertCreateUserRowToResponse(user db.CreateUserRow) userResponse {
+	createdAt := time.Time{}
+	if user.CreatedAt.Valid {
+		createdAt = user.CreatedAt.Time
+	}
+
+	return userResponse{
+		CognitoSub: user.CognitoSub,
+		Username:   user.Username,
+		CreatedAt:  createdAt,
+	}
+}
+
+// convertUpdateUserRowToResponse converts an UpdateUserPasswordRow to userResponse
+func convertUpdateUserRowToResponse(user db.UpdateUserPasswordRow) userResponse {
+	createdAt := time.Time{}
+	if user.CreatedAt.Valid {
+		createdAt = user.CreatedAt.Time
+	}
+
+	return userResponse{
+		CognitoSub: user.CognitoSub,
+		Username:   user.Username,
+		CreatedAt:  createdAt,
+	}
+}
+
+// Keep the original function for backward compatibility if needed
 func convertUserToResponse(user db.User) userResponse {
 	createdAt := time.Time{}
 	if user.CreatedAt.Valid {
@@ -45,6 +103,13 @@ func convertUserToResponse(user db.User) userResponse {
 
 // getUsers handles requests to get all users
 func (server *Server) getUsers(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	_, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Default pagination settings
 	limit := 10
 	offset := 0
@@ -75,10 +140,10 @@ func (server *Server) getUsers(ctx *gin.Context) {
 		return
 	}
 
-	// Convert users to response format
+	// Convert users to response format using the appropriate conversion function
 	userResponses := make([]userResponse, len(users))
 	for i, user := range users {
-		userResponses[i] = convertUserToResponse(user)
+		userResponses[i] = convertListUserRowToResponse(user)
 	}
 
 	ctx.JSON(http.StatusOK, userResponses)
@@ -86,10 +151,22 @@ func (server *Server) getUsers(ctx *gin.Context) {
 
 // getUserByID handles requests to get a specific user
 func (server *Server) getUserByID(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	authedCognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get cognito_sub from URL param
 	cognitoSub := ctx.Param("cognito_sub")
 
-	// No need to convert to integer, keep as string
+	// Only allow users to view their own information unless they're admins
+	// TODO: Add admin check if admin functionality is needed
+	if cognitoSub != authedCognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to view this user's information"})
+		return
+	}
 
 	// Get user from database using the store
 	user, err := server.store.GetUserByID(ctx, cognitoSub)
@@ -102,12 +179,19 @@ func (server *Server) getUserByID(ctx *gin.Context) {
 		return
 	}
 
-	// Return user response
-	ctx.JSON(http.StatusOK, convertUserToResponse(user))
+	// Return user response with the appropriate conversion function
+	ctx.JSON(http.StatusOK, convertGetUserRowToResponse(user))
 }
 
 // createUser handles requests to create a new user
 func (server *Server) createUser(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	_, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Parse request body
 	var req createUserRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -139,16 +223,28 @@ func (server *Server) createUser(ctx *gin.Context) {
 		return
 	}
 
-	// Return created user
-	ctx.JSON(http.StatusCreated, convertUserToResponse(user))
+	// Return created user with the appropriate conversion function
+	ctx.JSON(http.StatusCreated, convertCreateUserRowToResponse(user))
 }
 
 // updateUser handles requests to update an existing user
 func (server *Server) updateUser(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	authedCognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get cognito_sub from URL param
 	cognitoSub := ctx.Param("cognito_sub")
 
-	// No need to convert to integer, keep as string
+	// Only allow users to update their own information unless they're admins
+	// TODO: Add admin check if admin functionality is needed
+	if cognitoSub != authedCognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to update this user's information"})
+		return
+	}
 
 	// Parse request body
 	var req updateUserRequest
@@ -179,16 +275,28 @@ func (server *Server) updateUser(ctx *gin.Context) {
 		return
 	}
 
-	// Return updated user
-	ctx.JSON(http.StatusOK, convertUserToResponse(user))
+	// Return updated user with the appropriate conversion function
+	ctx.JSON(http.StatusOK, convertUpdateUserRowToResponse(user))
 }
 
 // deleteUser handles requests to delete a user
 func (server *Server) deleteUser(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	authedCognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get cognito_sub from URL param
 	cognitoSub := ctx.Param("cognito_sub")
 
-	// No need to convert to integer, keep as string
+	// Only allow users to delete their own account unless they're admins
+	// TODO: Add admin check if admin functionality is needed
+	if cognitoSub != authedCognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to delete this user"})
+		return
+	}
 
 	// Check if user exists
 	_, err := server.store.GetUserByID(ctx, cognitoSub)

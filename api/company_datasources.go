@@ -61,6 +61,13 @@ func convertDatasourceToResponse(datasource db.ListDatasourcesByCompanyRow) data
 
 // createAndAssociateDatasource handles requests to create a new datasource and associate it with a company
 func (server *Server) createAndAssociateDatasource(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	companyIDParam := ctx.Param("company_id")
 	companyID, err := strconv.Atoi(companyIDParam)
@@ -69,14 +76,18 @@ func (server *Server) createAndAssociateDatasource(ctx *gin.Context) {
 		return
 	}
 
-	// Check if company exists
-	_, err = server.store.GetCompanyByID(ctx, int32(companyID))
+	// Check if company exists and belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to add datasources to this company"})
 		return
 	}
 
@@ -125,6 +136,13 @@ func (server *Server) createAndAssociateDatasource(ctx *gin.Context) {
 
 // associateDatasourceWithCompany handles requests to associate an existing datasource with a company
 func (server *Server) associateDatasourceWithCompany(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	companyIDParam := ctx.Param("company_id")
 	companyID, err := strconv.Atoi(companyIDParam)
@@ -133,14 +151,18 @@ func (server *Server) associateDatasourceWithCompany(ctx *gin.Context) {
 		return
 	}
 
-	// Check if company exists
-	_, err = server.store.GetCompanyByID(ctx, int32(companyID))
+	// Check if company exists and belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to associate datasources with this company"})
 		return
 	}
 
@@ -195,6 +217,13 @@ func (server *Server) associateDatasourceWithCompany(ctx *gin.Context) {
 
 // removeDatasourceFromCompany handles requests to remove a datasource association from a company
 func (server *Server) removeDatasourceFromCompany(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID and datasource ID from URL params
 	companyIDParam := ctx.Param("company_id")
 	datasourceIDParam := ctx.Param("datasource_id")
@@ -208,6 +237,21 @@ func (server *Server) removeDatasourceFromCompany(ctx *gin.Context) {
 	datasourceID, err := strconv.Atoi(datasourceIDParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid datasource ID format"})
+		return
+	}
+
+	// Check if company exists and belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to remove datasources from this company"})
 		return
 	}
 
@@ -241,6 +285,13 @@ func (server *Server) removeDatasourceFromCompany(ctx *gin.Context) {
 
 // listDatasourcesByCompany handles requests to get all datasources for a specific company
 func (server *Server) listDatasourcesByCompany(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	companyIDParam := ctx.Param("company_id")
 	companyID, err := strconv.Atoi(companyIDParam)
@@ -249,14 +300,18 @@ func (server *Server) listDatasourcesByCompany(ctx *gin.Context) {
 		return
 	}
 
-	// Check if company exists
-	_, err = server.store.GetCompanyByID(ctx, int32(companyID))
+	// Check if company exists and belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to view datasources for this company"})
 		return
 	}
 

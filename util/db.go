@@ -39,13 +39,13 @@ func SetupDBConnection(config Config) (*sql.DB, error) {
 
 // SetupTestDBConnection establishes a test database connection
 func SetupTestDBConnection(config Config) (*sql.DB, error) {
-	db, err := ConnectDB(config.DBDriver, config.DBTestSource)
+	db, err := ConnectDB(config.DBDriver, config.DBSource)
 	if err != nil {
 		return nil, err
 	}
 
 	// Log successful connection
-	log.Printf("Connected to test database: %s", config.DBTestSource)
+	log.Printf("Connected to test database: %s", config.DBSource)
 
 	return db, nil
 }

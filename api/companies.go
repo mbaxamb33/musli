@@ -183,13 +183,16 @@ func (server *Server) createCompany(ctx *gin.Context) {
 		return
 	}
 
-	// Get cognito_sub from authentication context
-	// In a real application, you would get this from authenticated user
-	cognitoSub := "default_cognito_sub" // TODO: Replace with actual authenticated user's cognito_sub
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
 
 	// Convert request to database params
 	arg := db.CreateCompanyParams{
-		CognitoSub:  sql.NullString{String: cognitoSub, Valid: true},
+		CognitoSub:  sql.NullString{String: cognitoSub.(string), Valid: true},
 		CompanyName: req.CompanyName,
 		Industry:    sql.NullString{String: req.Industry, Valid: req.Industry != ""},
 		Website:     sql.NullString{String: req.Website, Valid: req.Website != ""},
@@ -207,7 +210,7 @@ func (server *Server) createCompany(ctx *gin.Context) {
 	// Return created company as response
 	result := companyResponse{
 		CompanyID:   company.CompanyID,
-		CognitoSub:  cognitoSub,
+		CognitoSub:  cognitoSub.(string),
 		CompanyName: company.CompanyName,
 		Industry:    req.Industry,
 		Website:     req.Website,
@@ -220,6 +223,13 @@ func (server *Server) createCompany(ctx *gin.Context) {
 
 // getCompanyByID handles requests to get a specific company
 func (server *Server) getCompanyByID(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -239,12 +249,25 @@ func (server *Server) getCompanyByID(ctx *gin.Context) {
 		return
 	}
 
+	// Ensure the user owns this company
+	if !company.CognitoSub.Valid || company.CognitoSub.String != cognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to access this company"})
+		return
+	}
+
 	// Return company response
 	ctx.JSON(http.StatusOK, convertCompanyToResponse(company))
 }
 
 // listCompanies handles requests to get all companies with pagination
 func (server *Server) listCompanies(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Default pagination settings
 	limit := 10
 	offset := 0
@@ -265,10 +288,11 @@ func (server *Server) listCompanies(ctx *gin.Context) {
 		offset = 0
 	}
 
-	// Get companies from database
-	companies, err := server.store.ListCompanies(ctx, db.ListCompaniesParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+	// Get companies from database for the authenticated user
+	companies, err := server.store.GetCompaniesByCognitoSub(ctx, db.GetCompaniesByCognitoSubParams{
+		CognitoSub: sql.NullString{String: cognitoSub.(string), Valid: true},
+		Limit:      int32(limit),
+		Offset:     int32(offset),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch companies"})
@@ -278,7 +302,7 @@ func (server *Server) listCompanies(ctx *gin.Context) {
 	// Convert companies to response format
 	companyResponses := make([]companyResponse, len(companies))
 	for i, company := range companies {
-		companyResponses[i] = convertCompanyListToResponse(company)
+		companyResponses[i] = convertCompanyCognitoToResponse(company)
 	}
 
 	ctx.JSON(http.StatusOK, companyResponses)
@@ -286,8 +310,22 @@ func (server *Server) listCompanies(ctx *gin.Context) {
 
 // getCompaniesByUser handles requests to get companies for a specific user
 func (server *Server) getCompaniesByUser(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	authedCognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get cognito_sub from URL param
-	cognitoSub := ctx.Param("cognito_sub")
+	requestedCognitoSub := ctx.Param("cognito_sub")
+
+	// Only allow users to get their own companies unless they have admin privileges
+	// TODO: Add admin check if admin functionality is needed
+	if requestedCognitoSub != authedCognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to access this user's companies"})
+		return
+	}
 
 	// Default pagination settings
 	limit := 10
@@ -311,7 +349,7 @@ func (server *Server) getCompaniesByUser(ctx *gin.Context) {
 
 	// Get companies from database
 	companies, err := server.store.GetCompaniesByCognitoSub(ctx, db.GetCompaniesByCognitoSubParams{
-		CognitoSub: sql.NullString{String: cognitoSub, Valid: true},
+		CognitoSub: sql.NullString{String: requestedCognitoSub, Valid: true},
 		Limit:      int32(limit),
 		Offset:     int32(offset),
 	})
@@ -331,6 +369,13 @@ func (server *Server) getCompaniesByUser(ctx *gin.Context) {
 
 // updateCompany handles requests to update an existing company
 func (server *Server) updateCompany(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -347,13 +392,19 @@ func (server *Server) updateCompany(ctx *gin.Context) {
 	}
 
 	// Check if company exists
-	_, err = server.store.GetCompanyByID(ctx, int32(id))
+	company, err := server.store.GetCompanyByID(ctx, int32(id))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+
+	// Ensure the user owns this company
+	if !company.CognitoSub.Valid || company.CognitoSub.String != cognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to update this company"})
 		return
 	}
 
@@ -367,7 +418,7 @@ func (server *Server) updateCompany(ctx *gin.Context) {
 		Description: sql.NullString{String: req.Description, Valid: req.Description != ""},
 	}
 
-	company, err := server.store.UpdateCompany(ctx, arg)
+	updatedCompany, err := server.store.UpdateCompany(ctx, arg)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update company"})
 		return
@@ -375,20 +426,27 @@ func (server *Server) updateCompany(ctx *gin.Context) {
 
 	// Return updated company
 	response := companyResponse{
-		CompanyID:   company.CompanyID,
-		CompanyName: company.CompanyName,
-		CognitoSub:  company.CognitoSub.String,
+		CompanyID:   updatedCompany.CompanyID,
+		CompanyName: updatedCompany.CompanyName,
+		CognitoSub:  updatedCompany.CognitoSub.String,
 		Industry:    req.Industry,
 		Website:     req.Website,
 		Address:     req.Address,
 		Description: req.Description,
-		CreatedAt:   company.CreatedAt.Time,
+		CreatedAt:   updatedCompany.CreatedAt.Time,
 	}
 	ctx.JSON(http.StatusOK, response)
 }
 
 // deleteCompany handles requests to delete a company
 func (server *Server) deleteCompany(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -397,14 +455,20 @@ func (server *Server) deleteCompany(ctx *gin.Context) {
 		return
 	}
 
-	// Check if company exists
-	_, err = server.store.GetCompanyByID(ctx, int32(id))
+	// Check if company exists and belongs to the user
+	company, err := server.store.GetCompanyByID(ctx, int32(id))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+
+	// Ensure the user owns this company
+	if !company.CognitoSub.Valid || company.CognitoSub.String != cognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to delete this company"})
 		return
 	}
 

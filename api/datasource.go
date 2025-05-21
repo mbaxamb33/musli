@@ -38,8 +38,26 @@ func convertCompanyDatasourceToResponse(datasource db.ListDatasourcesByCompanyRo
 	}
 }
 
+// Helper function to check if a user has access to a contact through company ownership
+func (server *Server) userHasAccessToContact(ctx *gin.Context, contactID int32, cognitoSub string) (bool, error) {
+	contact, err := server.store.GetContactByID(ctx, contactID)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if the user owns the company that this contact belongs to
+	return server.userHasAccessToCompany(ctx, contact.CompanyID, cognitoSub)
+}
+
 // createCompanyDatasource handles creating datasources for companies
 func (server *Server) createCompanyDatasource(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	companyIDParam := ctx.Param("id")
 	companyID, err := strconv.Atoi(companyIDParam)
@@ -48,14 +66,18 @@ func (server *Server) createCompanyDatasource(ctx *gin.Context) {
 		return
 	}
 
-	// Check if company exists
-	_, err = server.store.GetCompanyByID(ctx, int32(companyID))
+	// Check if company exists and belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to add datasources to this company"})
 		return
 	}
 
@@ -106,6 +128,13 @@ func (server *Server) createCompanyDatasource(ctx *gin.Context) {
 
 // createContactDatasource handles creating datasources for contacts
 func (server *Server) createContactDatasource(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get contact ID from URL param
 	contactIDParam := ctx.Param("id")
 	contactID, err := strconv.Atoi(contactIDParam)
@@ -114,14 +143,18 @@ func (server *Server) createContactDatasource(ctx *gin.Context) {
 		return
 	}
 
-	// Check if contact exists
-	_, err = server.store.GetContactByID(ctx, int32(contactID))
+	// Check if contact exists and belongs to a company owned by the authenticated user
+	hasAccess, err := server.userHasAccessToContact(ctx, int32(contactID), cognitoSub.(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Contact not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch contact"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to add datasources to this contact"})
 		return
 	}
 
@@ -172,6 +205,13 @@ func (server *Server) createContactDatasource(ctx *gin.Context) {
 
 // uploadDatasource handles file uploads for both companies and contacts
 func (server *Server) uploadDatasource(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Determine if this is for a company or contact
 	entityType := ctx.Param("entity_type") // "companies" or "contacts"
 	entityID, err := strconv.Atoi(ctx.Param("id"))
@@ -180,9 +220,10 @@ func (server *Server) uploadDatasource(ctx *gin.Context) {
 		return
 	}
 
-	// Validate entity exists
+	// Validate entity exists and user has access
+	var hasAccess bool
 	if entityType == "companies" {
-		_, err = server.store.GetCompanyByID(ctx, int32(entityID))
+		hasAccess, err = server.userHasAccessToCompany(ctx, int32(entityID), cognitoSub.(string))
 		if err != nil {
 			if err == sql.ErrNoRows {
 				ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
@@ -191,14 +232,22 @@ func (server *Server) uploadDatasource(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
 			return
 		}
+		if !hasAccess {
+			ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to upload files to this company"})
+			return
+		}
 	} else if entityType == "contacts" {
-		_, err = server.store.GetContactByID(ctx, int32(entityID))
+		hasAccess, err = server.userHasAccessToContact(ctx, int32(entityID), cognitoSub.(string))
 		if err != nil {
 			if err == sql.ErrNoRows {
 				ctx.JSON(http.StatusNotFound, gin.H{"error": "Contact not found"})
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch contact"})
+			return
+		}
+		if !hasAccess {
+			ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to upload files to this contact"})
 			return
 		}
 	} else {
@@ -314,6 +363,13 @@ func (server *Server) uploadDatasource(ctx *gin.Context) {
 
 // listCompanyDatasources handles listing datasources for a company
 func (server *Server) listCompanyDatasources(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	companyIDParam := ctx.Param("id")
 	companyID, err := strconv.Atoi(companyIDParam)
@@ -322,14 +378,18 @@ func (server *Server) listCompanyDatasources(ctx *gin.Context) {
 		return
 	}
 
-	// Check if company exists
-	_, err = server.store.GetCompanyByID(ctx, int32(companyID))
+	// Check if company exists and belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to view datasources for this company"})
 		return
 	}
 
@@ -374,6 +434,13 @@ func (server *Server) listCompanyDatasources(ctx *gin.Context) {
 
 // listContactDatasources handles listing datasources for a contact
 func (server *Server) listContactDatasources(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get contact ID from URL param
 	contactIDParam := ctx.Param("id")
 	contactID, err := strconv.Atoi(contactIDParam)
@@ -382,14 +449,18 @@ func (server *Server) listContactDatasources(ctx *gin.Context) {
 		return
 	}
 
-	// Check if contact exists
-	_, err = server.store.GetContactByID(ctx, int32(contactID))
+	// Check if contact exists and belongs to a company owned by the authenticated user
+	hasAccess, err := server.userHasAccessToContact(ctx, int32(contactID), cognitoSub.(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Contact not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch contact"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to view datasources for this contact"})
 		return
 	}
 
@@ -434,6 +505,13 @@ func (server *Server) listContactDatasources(ctx *gin.Context) {
 
 // deleteCompanyDatasource handles removing a datasource from a company
 func (server *Server) deleteCompanyDatasource(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID and datasource ID from URL params
 	companyIDParam := ctx.Param("id")
 	datasourceIDParam := ctx.Param("datasource_id")
@@ -447,6 +525,21 @@ func (server *Server) deleteCompanyDatasource(ctx *gin.Context) {
 	datasourceID, err := strconv.Atoi(datasourceIDParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid datasource ID format"})
+		return
+	}
+
+	// Check if company exists and belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to delete datasources from this company"})
 		return
 	}
 
@@ -480,6 +573,13 @@ func (server *Server) deleteCompanyDatasource(ctx *gin.Context) {
 
 // deleteContactDatasource handles removing a datasource from a contact
 func (server *Server) deleteContactDatasource(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get contact ID and datasource ID from URL params
 	contactIDParam := ctx.Param("id")
 	datasourceIDParam := ctx.Param("datasource_id")
@@ -493,6 +593,21 @@ func (server *Server) deleteContactDatasource(ctx *gin.Context) {
 	datasourceID, err := strconv.Atoi(datasourceIDParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid datasource ID format"})
+		return
+	}
+
+	// Check if contact exists and belongs to a company owned by the authenticated user
+	hasAccess, err := server.userHasAccessToContact(ctx, int32(contactID), cognitoSub.(string))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Contact not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch contact"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to delete datasources from this contact"})
 		return
 	}
 

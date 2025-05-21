@@ -85,6 +85,15 @@ func convertContactToResponse(contact db.Contact) contactResponse {
 	}
 }
 
+// Helper function to check if a user has access to a company
+func (server *Server) userHasAccessToCompany(ctx *gin.Context, companyID int32, cognitoSub string) (bool, error) {
+	company, err := server.store.GetCompanyByID(ctx, companyID)
+	if err != nil {
+		return false, err
+	}
+	return company.CognitoSub.Valid && company.CognitoSub.String == cognitoSub, nil
+}
+
 // createContact handles requests to create a new contact
 func (server *Server) createContact(ctx *gin.Context) {
 	var req createContactRequest
@@ -93,14 +102,27 @@ func (server *Server) createContact(ctx *gin.Context) {
 		return
 	}
 
-	// Check if company exists
-	_, err := server.store.GetCompanyByID(ctx, req.CompanyID)
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
+	// Check if company exists and belongs to the authenticated user
+	company, err := server.store.GetCompanyByID(ctx, req.CompanyID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch company"})
+		return
+	}
+
+	// Verify that the company belongs to the authenticated user
+	if !company.CognitoSub.Valid || company.CognitoSub.String != cognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to add contacts to this company"})
 		return
 	}
 
@@ -128,6 +150,13 @@ func (server *Server) createContact(ctx *gin.Context) {
 
 // getContactByID handles requests to get a specific contact
 func (server *Server) getContactByID(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get contact ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -147,12 +176,30 @@ func (server *Server) getContactByID(ctx *gin.Context) {
 		return
 	}
 
+	// Check if the contact's company belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, contact.CompanyID, cognitoSub.(string))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify company ownership"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to access this contact"})
+		return
+	}
+
 	// Return contact response
 	ctx.JSON(http.StatusOK, convertContactToResponse(contact))
 }
 
 // listContacts handles requests to get all contacts with pagination
 func (server *Server) listContacts(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	_, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// This is a placeholder implementation since there's no direct "list all contacts" query
 	// In a real implementation, you would need to add a new query in your SQL files
 	// For now, we'll return a 501 Not Implemented
@@ -161,11 +208,33 @@ func (server *Server) listContacts(ctx *gin.Context) {
 
 // listContactsByCompany handles requests to get contacts for a specific company
 func (server *Server) listContactsByCompany(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get company ID from URL param
 	companyIDParam := ctx.Param("company_id")
 	companyID, err := strconv.Atoi(companyIDParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid company ID format"})
+		return
+	}
+
+	// Check if the company belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, int32(companyID), cognitoSub.(string))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify company ownership"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to access contacts for this company"})
 		return
 	}
 
@@ -210,6 +279,13 @@ func (server *Server) listContactsByCompany(ctx *gin.Context) {
 
 // searchContactsByName handles requests to search contacts by name
 func (server *Server) searchContactsByName(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get search query from URL param
 	query := ctx.Query("q")
 	if query == "" {
@@ -238,6 +314,8 @@ func (server *Server) searchContactsByName(ctx *gin.Context) {
 	}
 
 	// Get contacts from database
+	// Note: This needs to be modified to only return contacts for companies owned by the user
+	// You may need to create a new database query for this
 	contacts, err := server.store.SearchContactsByName(ctx, db.SearchContactsByNameParams{
 		Column1: sql.NullString{String: query, Valid: true},
 		Limit:   int32(limit),
@@ -248,9 +326,19 @@ func (server *Server) searchContactsByName(ctx *gin.Context) {
 		return
 	}
 
+	// Filter contacts to only include those from companies owned by the user
+	// Note: This is not efficient - ideally, this filtering should be done at the database level
+	var authorizedContacts []db.Contact
+	for _, contact := range contacts {
+		hasAccess, err := server.userHasAccessToCompany(ctx, contact.CompanyID, cognitoSub.(string))
+		if err == nil && hasAccess {
+			authorizedContacts = append(authorizedContacts, contact)
+		}
+	}
+
 	// Convert contacts to response format
-	contactResponses := make([]contactResponse, len(contacts))
-	for i, contact := range contacts {
+	contactResponses := make([]contactResponse, len(authorizedContacts))
+	for i, contact := range authorizedContacts {
 		contactResponses[i] = convertContactToResponse(contact)
 	}
 
@@ -259,6 +347,13 @@ func (server *Server) searchContactsByName(ctx *gin.Context) {
 
 // updateContact handles requests to update an existing contact
 func (server *Server) updateContact(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get contact ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -275,13 +370,24 @@ func (server *Server) updateContact(ctx *gin.Context) {
 	}
 
 	// Check if contact exists and get its company ID
-	_, err = server.store.GetContactByID(ctx, int32(id))
+	contact, err := server.store.GetContactByID(ctx, int32(id))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Contact not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch contact"})
+		return
+	}
+
+	// Check if the contact's company belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, contact.CompanyID, cognitoSub.(string))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify company ownership"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to update this contact"})
 		return
 	}
 
@@ -308,6 +414,13 @@ func (server *Server) updateContact(ctx *gin.Context) {
 
 // deleteContact handles requests to delete a contact
 func (server *Server) deleteContact(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get contact ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -317,13 +430,24 @@ func (server *Server) deleteContact(ctx *gin.Context) {
 	}
 
 	// Check if contact exists
-	_, err = server.store.GetContactByID(ctx, int32(id))
+	contact, err := server.store.GetContactByID(ctx, int32(id))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Contact not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch contact"})
+		return
+	}
+
+	// Check if the contact's company belongs to the authenticated user
+	hasAccess, err := server.userHasAccessToCompany(ctx, contact.CompanyID, cognitoSub.(string))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify company ownership"})
+		return
+	}
+	if !hasAccess {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to delete this contact"})
 		return
 	}
 

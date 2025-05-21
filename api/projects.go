@@ -97,13 +97,16 @@ func (server *Server) createProject(ctx *gin.Context) {
 		return
 	}
 
-	// Get cognito_sub from authentication context
-	// In a real application, you would get this from authenticated user
-	cognitoSub := "default_cognito_sub" // TODO: Replace with actual authenticated user's cognito_sub
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
 
 	// Convert request to database params
 	arg := db.CreateProjectParams{
-		CognitoSub:  sql.NullString{String: cognitoSub, Valid: true},
+		CognitoSub:  sql.NullString{String: cognitoSub.(string), Valid: true},
 		ProjectName: req.ProjectName,
 		MainIdea:    sql.NullString{String: req.MainIdea, Valid: req.MainIdea != ""},
 	}
@@ -118,7 +121,7 @@ func (server *Server) createProject(ctx *gin.Context) {
 	// Return created project as response
 	response := projectResponse{
 		ProjectID:   project.ProjectID,
-		CognitoSub:  cognitoSub,
+		CognitoSub:  cognitoSub.(string),
 		ProjectName: project.ProjectName,
 		MainIdea:    req.MainIdea,
 		CreatedAt:   project.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
@@ -129,6 +132,13 @@ func (server *Server) createProject(ctx *gin.Context) {
 
 // getProjectByID handles requests to get a specific project
 func (server *Server) getProjectByID(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get project ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
@@ -148,15 +158,24 @@ func (server *Server) getProjectByID(ctx *gin.Context) {
 		return
 	}
 
+	// Ensure the user owns this project
+	if !project.CognitoSub.Valid || project.CognitoSub.String != cognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to access this project"})
+		return
+	}
+
 	// Return project response
 	ctx.JSON(http.StatusOK, convertProjectToResponse(project))
 }
 
 // listProjects handles requests to get projects for a user with pagination
 func (server *Server) listProjects(ctx *gin.Context) {
-	// Get cognito_sub from authentication context
-	// In a real application, you would get this from authenticated user
-	cognitoSub := "default_cognito_sub" // TODO: Replace with actual authenticated user's cognito_sub
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
 
 	// Default pagination settings
 	limit := 10
@@ -180,7 +199,7 @@ func (server *Server) listProjects(ctx *gin.Context) {
 
 	// Get projects from database
 	projects, err := server.store.ListProjectsByCognitoSub(ctx, db.ListProjectsByCognitoSubParams{
-		CognitoSub: sql.NullString{String: cognitoSub, Valid: true},
+		CognitoSub: sql.NullString{String: cognitoSub.(string), Valid: true},
 		Limit:      int32(limit),
 		Offset:     int32(offset),
 	})
@@ -200,11 +219,35 @@ func (server *Server) listProjects(ctx *gin.Context) {
 
 // deleteProject handles requests to delete a project
 func (server *Server) deleteProject(ctx *gin.Context) {
+	// Get authenticated user's cognito_sub from context
+	cognitoSub, exists := ctx.Get("cognito_sub")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized access"})
+		return
+	}
+
 	// Get project ID from URL param
 	idParam := ctx.Param("id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID format"})
+		return
+	}
+
+	// Check if project exists and belongs to the user
+	project, err := server.store.GetProjectByID(ctx, int32(id))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch project"})
+		return
+	}
+
+	// Ensure the user owns this project
+	if !project.CognitoSub.Valid || project.CognitoSub.String != cognitoSub.(string) {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to delete this project"})
 		return
 	}
 
