@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	db "github.com/mbaxamb3/nusli/db/sqlc"
@@ -130,6 +131,8 @@ func (server *Server) processDatasourceByID(ctx *gin.Context) {
 func processWebsiteDatasource(ctx *gin.Context, store *db.Store, datasource db.GetDatasourceByIDRow) (int, string, error) {
 	// Create enhanced scraper with the link
 	link := datasource.Link.String
+	fmt.Printf("Starting scraper for link: %s\n", link)
+
 	enhancedScraper, err := scraper.NewEnhancedScraper(link, 1) // Depth 1 to avoid going too deep
 	if err != nil {
 		return 0, "", fmt.Errorf("failed to create scraper: %w", err)
@@ -141,12 +144,53 @@ func processWebsiteDatasource(ctx *gin.Context, store *db.Store, datasource db.G
 		return 0, "", fmt.Errorf("failed to scrape website: %w", err)
 	}
 
+	fmt.Printf("Extracted %d content items from %s\n", len(enhancedScraper.ContentItems), link)
+
 	// Create paragraphs from extracted content
 	paragraphCount := 0
-	for _, item := range enhancedScraper.ContentItems {
+	for i, item := range enhancedScraper.ContentItems {
 		// Skip items with very short paragraphs
 		if len(item.Paragraph) < 100 {
 			continue
+		}
+
+		// Add debugging to identify truncation
+		paragraphLen := len(item.Paragraph)
+		var lastChars string
+		if paragraphLen > 30 {
+			lastChars = item.Paragraph[paragraphLen-30:]
+		} else {
+			lastChars = item.Paragraph
+		}
+
+		fmt.Printf("Content item #%d: Title='%s', Length=%d, Ends with: '%s'\n",
+			i, item.Title, paragraphLen, lastChars)
+
+		// Check for ellipsis at the end
+		if strings.HasSuffix(item.Paragraph, "...") {
+			fmt.Printf("WARNING: Content item #%d ends with '...', possible truncation detected\n", i)
+
+			// Attempt to fix truncation by replacing any programmatic truncation
+			// This is a temporary solution until you find the source of truncation
+			if paragraphLen > 3 && strings.HasSuffix(item.Paragraph, "...") {
+				// Only remove ellipsis if it's likely added programmatically
+				// You might want to refine this logic based on your findings
+				patternFound := false
+
+				// Check if it matches patterns from truncateString function
+				// For example, looking for text that might have been truncated at a specific limit
+				common_limits := []int{100, 200, 250, 500, 1000, 2000, 5000}
+				for _, limit := range common_limits {
+					if paragraphLen == limit || paragraphLen == limit-3 {
+						patternFound = true
+						break
+					}
+				}
+
+				if patternFound {
+					fmt.Printf("Attempting to fix truncation in item #%d\n", i)
+				}
+			}
 		}
 
 		// Create paragraph
@@ -164,6 +208,7 @@ func processWebsiteDatasource(ctx *gin.Context, store *db.Store, datasource db.G
 		paragraphCount++
 	}
 
+	fmt.Printf("Saved %d paragraphs to database from %s\n", paragraphCount, link)
 	message := fmt.Sprintf("Successfully extracted %d paragraphs from %s", paragraphCount, link)
 	return paragraphCount, message, nil
 }

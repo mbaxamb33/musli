@@ -92,7 +92,7 @@ func (s *Scraper) GatherLinks() error {
 		}
 
 		// Debug - print found links
-		fmt.Printf("Found link on %s: %s -> %s\n", e.Request.URL, link, absoluteURL)
+		// fmt.Printf("Found link on %s: %s -> %s\n", e.Request.URL, link, absoluteURL)
 
 		// Only process links that belong to the same domain
 		if s.isSameDomain(absoluteURL) {
@@ -176,7 +176,7 @@ func (s *Scraper) ScrapeLinks() error {
 		absoluteURL := e.Request.AbsoluteURL(link)
 
 		// Debug - print all found links
-		fmt.Printf("Found link on %s: %s -> %s\n", url, link, absoluteURL)
+		// fmt.Printf("Found link on %s: %s -> %s\n", url, link, absoluteURL)
 
 		if absoluteURL != "" {
 			// Store all links from the same domain

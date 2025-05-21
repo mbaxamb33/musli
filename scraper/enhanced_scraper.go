@@ -317,10 +317,10 @@ func cleanText(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// truncateString cuts a string to a maximum length with ellipsis
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}
+// // truncateString cuts a string to a maximum length with ellipsis
+// func truncateString(s string, maxLen int) string {
+// 	if len(s) <= maxLen {
+// 		return s
+// 	}
+// 	return s[:maxLen-3] + "..."
+// }
