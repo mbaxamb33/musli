@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gocolly/colly/v2"
 )
@@ -74,8 +75,8 @@ func (es *EnhancedScraper) ExtractTitleParagraphPairs() error {
 		}
 		processedURLs[selectorPath] = true
 
-		// Find headings and content sections
-		extractContentSections(e, pageURL, es)
+		// Use the improved section extraction
+		extractImprovedContentSections(e, pageURL, es)
 	})
 
 	// Visit each page in our link tree
@@ -103,90 +104,137 @@ func (es *EnhancedScraper) ExtractTitleParagraphPairs() error {
 	return nil
 }
 
-// extractContentSections finds title-paragraph pairs within an HTML element
-func extractContentSections(e *colly.HTMLElement, pageURL string, es *EnhancedScraper) {
-	// Track headings and their paragraphs at different levels
-	type headingContent struct {
-		title string
-		depth int
+// Section represents a logical section from a webpage
+type Section struct {
+	Title     string
+	Level     int
+	Content   []string
+	StartTime time.Time
+}
+
+// extractImprovedContentSections implements the header + associated content approach
+func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *EnhancedScraper) {
+	// Track all sections we find
+	var sections []Section
+
+	// Keep track of the current active section hierarchy
+	// The array index represents the heading level (0-6)
+	// and the value is the index in the sections array
+	sectionHierarchy := make([]int, 7)
+	for i := range sectionHierarchy {
+		sectionHierarchy[i] = -1 // -1 means no section at this level yet
 	}
 
-	var currentHeadings []headingContent
+	// Default section for content before any headings
+	defaultSection := Section{
+		Title:     "Page Content",
+		Level:     0,
+		Content:   []string{},
+		StartTime: time.Now(),
+	}
+	sections = append(sections, defaultSection)
+	sectionHierarchy[0] = 0 // The default section is at index 0
 
-	// Process all child elements in sequence to maintain structure relationship
-	e.ForEach("*", func(_ int, child *colly.HTMLElement) {
-		tagName := child.Name
+	// Create an ordered list of all elements to process
+	var elements []*colly.HTMLElement
 
-		// Check if this is a heading element
-		isHeading := false
-		headingLevel := 0
+	// First collect all relevant elements to ensure proper ordering
+	e.ForEach("h1, h2, h3, h4, h5, h6, p, div", func(_ int, el *colly.HTMLElement) {
+		elements = append(elements, el)
+	})
 
+	// Process elements in document order
+	for _, el := range elements {
+		tagName := el.Name
+
+		// Handle heading elements
 		if len(tagName) == 2 && tagName[0] == 'h' && tagName[1] >= '1' && tagName[1] <= '6' {
-			isHeading = true
-			headingLevel = int(tagName[1] - '0')
-		}
+			headingLevel := int(tagName[1] - '0')
+			headingText := strings.TrimSpace(el.Text)
 
-		if isHeading {
-			// Found a heading, adjust current headings stack
-			title := strings.TrimSpace(child.Text)
-			if title == "" {
-				return
+			if headingText == "" {
+				continue // Skip empty headings
 			}
 
-			// Remove any headings at same or deeper level
-			for i := 0; i < len(currentHeadings); i++ {
-				if currentHeadings[i].depth >= headingLevel {
-					currentHeadings = currentHeadings[:i]
+			// Create a new section for this heading
+			newSection := Section{
+				Title:     headingText,
+				Level:     headingLevel,
+				Content:   []string{},
+				StartTime: time.Now(),
+			}
+
+			// Add section to our collection
+			sections = append(sections, newSection)
+			currentIndex := len(sections) - 1
+
+			// Update the section hierarchy
+			sectionHierarchy[headingLevel] = currentIndex
+
+			// Clear any lower level sections (they're no longer active)
+			for i := headingLevel + 1; i < len(sectionHierarchy); i++ {
+				sectionHierarchy[i] = -1
+			}
+
+		} else if tagName == "p" || (tagName == "div" && !hasNestedBlockElements(el)) {
+			// Handle content elements
+			content := strings.TrimSpace(el.Text)
+
+			// Skip if content is too short or empty
+			if len(content) < 50 || countWords(content) < 10 {
+				continue
+			}
+
+			// Skip if content looks like HTML
+			if strings.Contains(content, "<") && strings.Contains(content, ">") {
+				continue
+			}
+
+			// Find the active section to add this content to
+			// Start from the highest heading level and work down
+			activeSection := -1
+			for level := 6; level >= 0; level-- {
+				if sectionHierarchy[level] != -1 {
+					activeSection = sectionHierarchy[level]
 					break
 				}
 			}
 
-			// Add this heading
-			currentHeadings = append(currentHeadings, headingContent{
-				title: title,
-				depth: headingLevel,
-			})
-		} else if tagName == "p" ||
-			tagName == "div" && !hasBlockElements(child) ||
-			tagName == "span" && len(strings.TrimSpace(child.Text)) > 100 {
-			// Found a paragraph or text-containing div
-			paragraph := strings.TrimSpace(child.Text)
-
-			// Skip if paragraph is too short or empty
-			if len(paragraph) == 0 || countWords(paragraph) < 10 {
-				return
+			if activeSection != -1 {
+				// Add content to the active section
+				sections[activeSection].Content = append(sections[activeSection].Content, content)
 			}
-
-			// Skip if paragraph contains HTML or looks like a link
-			if strings.Contains(paragraph, "<") && strings.Contains(paragraph, ">") {
-				return
-			}
-
-			// Use the most specific (deepest) heading as the title
-			title := "Untitled Content"
-			if len(currentHeadings) > 0 {
-				title = currentHeadings[len(currentHeadings)-1].title
-			}
-
-			// Create hash from both title and content to identify duplicates
-			hash := generateContentHash(title, paragraph)
-
-			// Skip if we've seen this exact content before
-			es.mu.Lock()
-			if !es.seenContent[hash] {
-				es.seenContent[hash] = true
-
-				// Add to content items
-				es.ContentItems = append(es.ContentItems, ContentItem{
-					URL:       pageURL,
-					Title:     title,
-					Paragraph: paragraph,
-					Hash:      hash,
-				})
-			}
-			es.mu.Unlock()
 		}
-	})
+	}
+
+	// Process each section to create ContentItems
+	for _, section := range sections {
+		// Skip sections with no content
+		if len(section.Content) == 0 {
+			continue
+		}
+
+		// Combine all content for this section
+		combinedContent := strings.Join(section.Content, "\n\n")
+
+		// Create hash to detect duplicates
+		hash := generateContentHash(section.Title, combinedContent)
+
+		// Add to content items if not a duplicate
+		es.mu.Lock()
+		if !es.seenContent[hash] {
+			es.seenContent[hash] = true
+
+			// Create the content item
+			es.ContentItems = append(es.ContentItems, ContentItem{
+				URL:       pageURL,
+				Title:     section.Title,
+				Paragraph: combinedContent,
+				Hash:      hash,
+			})
+		}
+		es.mu.Unlock()
+	}
 }
 
 // Run executes the complete enhanced scraping process
@@ -225,7 +273,7 @@ func (es *EnhancedScraper) removeDuplicateContent() {
 
 	// Replace with deduplicated list
 	es.ContentItems = uniqueItems
-	fmt.Printf("Removed %d duplicate items\n", len(seen)-len(uniqueItems))
+	fmt.Printf("Removed %d duplicate items\n", len(es.ContentItems)-len(uniqueItems))
 }
 
 // Helper functions
@@ -242,9 +290,10 @@ func generateContentHash(title, content string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Check if an element contains block-level elements
-func hasBlockElements(e *colly.HTMLElement) bool {
-	blockElements := []string{"div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table", "section", "article"}
+// hasNestedBlockElements checks if an element contains common block-level elements
+func hasNestedBlockElements(e *colly.HTMLElement) bool {
+	blockElements := []string{"div", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+		"ul", "ol", "table", "section", "article", "aside", "nav"}
 
 	for _, tag := range blockElements {
 		if e.DOM.Find(tag).Length() > 0 {
