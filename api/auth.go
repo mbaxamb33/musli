@@ -166,7 +166,13 @@ func (server *Server) handleConfirmSignUp(ctx *gin.Context) {
 
 // Handle login redirect
 func (server *Server) handleLogin(ctx *gin.Context) {
-	state := "randomState" // In production, use a secure random string
+	// Get the return URL from the query parameters, with a default value of "/"
+	returnURL := ctx.DefaultQuery("returnUrl", "/")
+
+	// Use the return URL as the state parameter to preserve it through the OAuth flow
+	state := returnURL
+
+	// Start OAuth flow with the state parameter
 	url := oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	ctx.Redirect(http.StatusFound, url)
 }
@@ -177,6 +183,13 @@ func (server *Server) handleCallback(ctx *gin.Context) {
 	if code == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Missing authorization code"})
 		return
+	}
+
+	// Get the state parameter (which contains the return URL)
+	state := ctx.Query("state")
+	returnURL := "/"
+	if state != "" {
+		returnURL = state
 	}
 
 	// Exchange authorization code for tokens
@@ -203,14 +216,14 @@ func (server *Server) handleCallback(ctx *gin.Context) {
 		return
 	}
 
-	// Redirect to frontend with tokens
+	// Redirect to frontend with tokens and the return URL
 	frontendURL := "http://localhost:5173/callback"
-	redirectURL := fmt.Sprintf("%s?access_token=%s&id_token=%s&refresh_token=%s&message=%s",
+	redirectURL := fmt.Sprintf("%s?access_token=%s&id_token=%s&refresh_token=%s&return_url=%s",
 		frontendURL,
 		url.QueryEscape(accessToken),
 		url.QueryEscape(rawIDToken),
 		url.QueryEscape(refreshToken),
-		url.QueryEscape("User authenticated"))
+		url.QueryEscape(returnURL))
 
 	ctx.Redirect(http.StatusFound, redirectURL)
 }

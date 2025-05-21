@@ -57,18 +57,6 @@ func (server *Server) processDatasourceByID(ctx *gin.Context) {
 		return
 	}
 
-	// // Verify that the user has access to this datasource
-	// hasAccess, err := server.userHasAccessToDatasource(ctx, int32(id), cognitoSub.(string))
-	// if err != nil {
-	// 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify datasource access"})
-	// 	return
-	// }
-	// if !hasAccess {
-	// 	ctx.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to process this datasource"})
-	// 	return
-	// }
-
-	// Process based on datasource type
 	var paragraphCount int
 	var message string
 
