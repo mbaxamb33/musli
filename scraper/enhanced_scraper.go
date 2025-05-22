@@ -113,7 +113,10 @@ type Section struct {
 }
 
 // extractImprovedContentSections implements the header + associated content approach
+// extractImprovedContentSections implements the header + associated content approach
 func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *EnhancedScraper) {
+	fmt.Println("======= STARTING CONTENT EXTRACTION FOR:", pageURL, "=======")
+
 	// Track all sections we find
 	var sections []Section
 
@@ -139,13 +142,28 @@ func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *En
 	var elements []*colly.HTMLElement
 
 	// First collect all relevant elements to ensure proper ordering
+	fmt.Println("Collecting elements for processing...")
+	elementCount := 0
 	e.ForEach("h1, h2, h3, h4, h5, h6, p, div", func(_ int, el *colly.HTMLElement) {
 		elements = append(elements, el)
+		elementCount++
 	})
+	fmt.Printf("Collected %d elements to process\n", elementCount)
 
 	// Process elements in document order
-	for _, el := range elements {
+	for i, el := range elements {
 		tagName := el.Name
+
+		// Log element info
+		rawText := el.Text
+		trimmedText := strings.TrimSpace(rawText)
+		fmt.Printf("\nElement #%d: Tag=%s, Length=%d\n", i, tagName, len(trimmedText))
+
+		if len(trimmedText) > 20 {
+			fmt.Printf("  Preview: '%s...'\n", trimmedText[:20])
+		} else if len(trimmedText) > 0 {
+			fmt.Printf("  Preview: '%s'\n", trimmedText)
+		}
 
 		// Handle heading elements
 		if len(tagName) == 2 && tagName[0] == 'h' && tagName[1] >= '1' && tagName[1] <= '6' {
@@ -153,8 +171,11 @@ func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *En
 			headingText := strings.TrimSpace(el.Text)
 
 			if headingText == "" {
+				fmt.Println("  Skipping empty heading")
 				continue // Skip empty headings
 			}
+
+			fmt.Printf("  Processing heading L%d: '%s'\n", headingLevel, headingText)
 
 			// Create a new section for this heading
 			newSection := Section{
@@ -167,6 +188,7 @@ func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *En
 			// Add section to our collection
 			sections = append(sections, newSection)
 			currentIndex := len(sections) - 1
+			fmt.Printf("  Created section #%d with title: '%s'\n", currentIndex, headingText)
 
 			// Update the section hierarchy
 			sectionHierarchy[headingLevel] = currentIndex
@@ -179,14 +201,39 @@ func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *En
 		} else if tagName == "p" || (tagName == "div" && !hasNestedBlockElements(el)) {
 			// Handle content elements
 			content := strings.TrimSpace(el.Text)
+			fmt.Printf("  Content element with %d chars, %d words\n",
+				len(content), countWords(content))
+
+			// Log full content for debugging
+			if len(content) > 0 {
+				// Print first 50 chars as preview
+				preview := content
+				if len(content) > 50 {
+					preview = content[:50] + "..."
+				}
+				fmt.Printf("  Content preview: '%s'\n", preview)
+
+				// Print last 20 chars to check for truncation
+				if len(content) > 20 {
+					lastChars := content[len(content)-20:]
+					fmt.Printf("  Content ending with: '%s'\n", lastChars)
+
+					// Check for ellipsis or other truncation signs
+					if strings.HasSuffix(content, "...") {
+						fmt.Printf("  WARNING: Content appears to be truncated\n")
+					}
+				}
+			}
 
 			// Skip if content is too short or empty
 			if len(content) < 50 || countWords(content) < 10 {
+				fmt.Println("  Skipping: Content too short")
 				continue
 			}
 
 			// Skip if content looks like HTML
 			if strings.Contains(content, "<") && strings.Contains(content, ">") {
+				fmt.Println("  Skipping: Content appears to contain HTML")
 				continue
 			}
 
@@ -201,21 +248,64 @@ func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *En
 			}
 
 			if activeSection != -1 {
+				// Print which section we're adding to
+				fmt.Printf("  Adding content to section #%d '%s'\n",
+					activeSection, sections[activeSection].Title)
+
+				// Check original HTML for debugging
+				// Check original HTML for debugging
+				htmlContent, htmlErr := el.DOM.Html()
+				if htmlErr != nil {
+					fmt.Printf("  Error getting HTML: %v\n", htmlErr)
+				} else {
+					htmlPreview := htmlContent
+					if len(htmlContent) > 100 {
+						htmlPreview = htmlContent[:100] + "..."
+					}
+					fmt.Printf("  Original HTML preview: %s\n", htmlPreview)
+				}
+
 				// Add content to the active section
 				sections[activeSection].Content = append(sections[activeSection].Content, content)
+			} else {
+				fmt.Println("  WARNING: No active section found for content")
 			}
+		} else {
+			fmt.Printf("  Skipping element: Not a heading, paragraph, or simple div\n")
 		}
 	}
 
 	// Process each section to create ContentItems
-	for _, section := range sections {
+	fmt.Printf("\nProcessing %d sections to create content items...\n", len(sections))
+	for i, section := range sections {
 		// Skip sections with no content
 		if len(section.Content) == 0 {
+			fmt.Printf("Section #%d '%s': Skipping - No content\n", i, section.Title)
 			continue
 		}
 
 		// Combine all content for this section
 		combinedContent := strings.Join(section.Content, "\n\n")
+		fmt.Printf("Section #%d '%s': Combined %d content chunks, total length: %d\n",
+			i, section.Title, len(section.Content), len(combinedContent))
+
+		// Log first and last part of combined content
+		if len(combinedContent) > 0 {
+			firstPart := combinedContent
+			if len(combinedContent) > 50 {
+				firstPart = combinedContent[:50] + "..."
+			}
+			fmt.Printf("  Content starts with: '%s'\n", firstPart)
+
+			if len(combinedContent) > 20 {
+				lastPart := combinedContent[len(combinedContent)-20:]
+				fmt.Printf("  Content ends with: '%s'\n", lastPart)
+
+				if strings.HasSuffix(combinedContent, "...") {
+					fmt.Printf("  WARNING: Final combined content appears to be truncated!\n")
+				}
+			}
+		}
 
 		// Create hash to detect duplicates
 		hash := generateContentHash(section.Title, combinedContent)
@@ -226,15 +316,31 @@ func extractImprovedContentSections(e *colly.HTMLElement, pageURL string, es *En
 			es.seenContent[hash] = true
 
 			// Create the content item
-			es.ContentItems = append(es.ContentItems, ContentItem{
+			newItem := ContentItem{
 				URL:       pageURL,
 				Title:     section.Title,
 				Paragraph: combinedContent,
 				Hash:      hash,
-			})
+			}
+
+			// Log the item being created
+			fmt.Printf("  Adding content item: Title='%s', Length=%d\n",
+				newItem.Title, len(newItem.Paragraph))
+
+			// Check for potential truncation in final output
+			if strings.HasSuffix(newItem.Paragraph, "...") {
+				fmt.Printf("  CRITICAL: Final content item ends with '...', confirming truncation!\n")
+			}
+
+			es.ContentItems = append(es.ContentItems, newItem)
+		} else {
+			fmt.Printf("  Skipping duplicate content with hash: %s\n", hash)
 		}
 		es.mu.Unlock()
 	}
+
+	fmt.Printf("======= COMPLETED CONTENT EXTRACTION FOR %s: Added %d content items =======\n\n",
+		pageURL, len(es.ContentItems))
 }
 
 // Run executes the complete enhanced scraping process
