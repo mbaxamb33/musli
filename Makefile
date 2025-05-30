@@ -15,4 +15,10 @@ sqlc:
 	sqlc generate
 server:
 	go run main.go
-.PHONY: createdb dropdb postgres stoppostgres migrateup migratedown server
+
+# Create a new migration file
+createmigration:
+	@read -p "Enter migration name: " name; \
+	migrate create -ext sql -dir db/migration/ -seq $$name
+
+.PHONY: createdb createmigration dropdb postgres stoppostgres migrateup migratedown server

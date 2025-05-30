@@ -9,7 +9,97 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
+
+type BriefTag string
+
+const (
+	BriefTagInitial  BriefTag = "initial"
+	BriefTagSpecific BriefTag = "specific"
+	BriefTagUpdated  BriefTag = "updated"
+	BriefTagFinal    BriefTag = "final"
+)
+
+func (e *BriefTag) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BriefTag(s)
+	case string:
+		*e = BriefTag(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BriefTag: %T", src)
+	}
+	return nil
+}
+
+type NullBriefTag struct {
+	BriefTag BriefTag `json:"brief_tag"`
+	Valid    bool     `json:"valid"` // Valid is true if BriefTag is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBriefTag) Scan(value interface{}) error {
+	if value == nil {
+		ns.BriefTag, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BriefTag.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBriefTag) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BriefTag), nil
+}
+
+type BriefType string
+
+const (
+	BriefTypeMaster        BriefType = "master"
+	BriefTypeStageSpecific BriefType = "stage_specific"
+	BriefTypeRegular       BriefType = "regular"
+)
+
+func (e *BriefType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BriefType(s)
+	case string:
+		*e = BriefType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BriefType: %T", src)
+	}
+	return nil
+}
+
+type NullBriefType struct {
+	BriefType BriefType `json:"brief_type"`
+	Valid     bool      `json:"valid"` // Valid is true if BriefType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBriefType) Scan(value interface{}) error {
+	if value == nil {
+		ns.BriefType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BriefType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBriefType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BriefType), nil
+}
 
 type DatasourceType string
 
@@ -175,6 +265,74 @@ type AnalysisInput struct {
 	CreatedAt    sql.NullTime   `json:"created_at"`
 }
 
+type BehavioralInsight struct {
+	ID                           uuid.UUID      `json:"id"`
+	BriefID                      uuid.NullUUID  `json:"brief_id"`
+	DecisionMakingStyle          sql.NullString `json:"decision_making_style"`
+	RiskAversionLevel            sql.NullInt32  `json:"risk_aversion_level"`
+	ChangeAdoptionPatterns       sql.NullString `json:"change_adoption_patterns"`
+	InnovationAppetite           sql.NullString `json:"innovation_appetite"`
+	ConsensusBuildingApproach    sql.NullString `json:"consensus_building_approach"`
+	ConflictResolutionStyle      sql.NullString `json:"conflict_resolution_style"`
+	CommunicationPatterns        sql.NullString `json:"communication_patterns"`
+	TrustBuildingFactors         sql.NullString `json:"trust_building_factors"`
+	CredibilityRequirements      sql.NullString `json:"credibility_requirements"`
+	RelationshipPreferences      sql.NullString `json:"relationship_preferences"`
+	MeetingEffectiveness         sql.NullString `json:"meeting_effectiveness"`
+	FollowUpResponsiveness       sql.NullString `json:"follow_up_responsiveness"`
+	DocumentationPreferences     sql.NullString `json:"documentation_preferences"`
+	PresentationStylePreferences sql.NullString `json:"presentation_style_preferences"`
+	NegotiationApproach          sql.NullString `json:"negotiation_approach"`
+	CreatedAt                    sql.NullTime   `json:"created_at"`
+	UpdatedAt                    sql.NullTime   `json:"updated_at"`
+}
+
+type Brief struct {
+	ID            uuid.UUID      `json:"id"`
+	MasterBriefID uuid.NullUUID  `json:"master_brief_id"`
+	BriefType     BriefType      `json:"brief_type"`
+	BriefTag      BriefTag       `json:"brief_tag"`
+	Title         sql.NullString `json:"title"`
+	TextContent   sql.NullString `json:"text_content"`
+	CreatedAt     sql.NullTime   `json:"created_at"`
+	UpdatedAt     sql.NullTime   `json:"updated_at"`
+}
+
+type BriefAttachment struct {
+	ID             uuid.UUID      `json:"id"`
+	BriefID        uuid.NullUUID  `json:"brief_id"`
+	DatasourceID   sql.NullInt32  `json:"datasource_id"`
+	AttachmentType sql.NullString `json:"attachment_type"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+}
+
+type BuyingCommittee struct {
+	ID                       uuid.UUID      `json:"id"`
+	BriefID                  uuid.NullUUID  `json:"brief_id"`
+	EconomicBuyerName        sql.NullString `json:"economic_buyer_name"`
+	EconomicBuyerTitle       sql.NullString `json:"economic_buyer_title"`
+	EconomicBuyerInfluence   sql.NullInt32  `json:"economic_buyer_influence"`
+	EconomicBuyerMotivations sql.NullString `json:"economic_buyer_motivations"`
+	TechnicalBuyerName       sql.NullString `json:"technical_buyer_name"`
+	TechnicalBuyerConcerns   sql.NullString `json:"technical_buyer_concerns"`
+	UserBuyerRepresentatives sql.NullString `json:"user_buyer_representatives"`
+	CoachChampionName        sql.NullString `json:"coach_champion_name"`
+	CoachInfluenceLevel      sql.NullInt32  `json:"coach_influence_level"`
+	BlockerIdentification    sql.NullString `json:"blocker_identification"`
+	BlockerConcerns          sql.NullString `json:"blocker_concerns"`
+	CommitteeDynamics        sql.NullString `json:"committee_dynamics"`
+	DecisionMakingProcess    sql.NullString `json:"decision_making_process"`
+	ConsensusRequirements    sql.NullString `json:"consensus_requirements"`
+	IndividualRiskTolerance  sql.NullString `json:"individual_risk_tolerance"`
+	CareerMotivations        sql.NullString `json:"career_motivations"`
+	PersonalSuccessMetrics   sql.NullString `json:"personal_success_metrics"`
+	RelationshipMapping      sql.NullString `json:"relationship_mapping"`
+	CommunicationPreferences sql.NullString `json:"communication_preferences"`
+	InfluenceNetworks        sql.NullString `json:"influence_networks"`
+	CreatedAt                sql.NullTime   `json:"created_at"`
+	UpdatedAt                sql.NullTime   `json:"updated_at"`
+}
+
 type Company struct {
 	CompanyID   int32          `json:"company_id"`
 	CompanyName string         `json:"company_name"`
@@ -192,6 +350,28 @@ type CompanyDatasource struct {
 	CreatedAt    sql.NullTime `json:"created_at"`
 }
 
+type CompanyIntelligence struct {
+	ID                        uuid.UUID      `json:"id"`
+	BriefID                   uuid.NullUUID  `json:"brief_id"`
+	CompanyName               sql.NullString `json:"company_name"`
+	CompanyOverview           sql.NullString `json:"company_overview"`
+	IndustrySector            sql.NullString `json:"industry_sector"`
+	CompanyRevenue            sql.NullString `json:"company_revenue"`
+	EmployeeCount             sql.NullInt32  `json:"employee_count"`
+	GeographicFootprint       sql.NullString `json:"geographic_footprint"`
+	ParentCompany             sql.NullString `json:"parent_company"`
+	MarketPosition            sql.NullString `json:"market_position"`
+	RecentNewsEvents          sql.NullString `json:"recent_news_events"`
+	FinancialHealth           sql.NullString `json:"financial_health"`
+	GrowthTrajectory          sql.NullString `json:"growth_trajectory"`
+	MarketPressures           sql.NullString `json:"market_pressures"`
+	RegulatoryEnvironment     sql.NullString `json:"regulatory_environment"`
+	MergerAcquisitionActivity sql.NullString `json:"merger_acquisition_activity"`
+	CompetitiveLandscape      sql.NullString `json:"competitive_landscape"`
+	CreatedAt                 sql.NullTime   `json:"created_at"`
+	UpdatedAt                 sql.NullTime   `json:"updated_at"`
+}
+
 type CompanyNews struct {
 	CompanyNewsID int32          `json:"company_news_id"`
 	CompanyID     int32          `json:"company_id"`
@@ -199,6 +379,28 @@ type CompanyNews struct {
 	Content       sql.NullString `json:"content"`
 	DatasourceID  sql.NullInt32  `json:"datasource_id"`
 	CreatedAt     sql.NullTime   `json:"created_at"`
+}
+
+type CompetitiveIntelligence struct {
+	ID                      uuid.UUID             `json:"id"`
+	BriefID                 uuid.NullUUID         `json:"brief_id"`
+	CompetitorsInEvaluation sql.NullString        `json:"competitors_in_evaluation"`
+	PreferredVendorBias     sql.NullString        `json:"preferred_vendor_bias"`
+	PreviousVendorHistory   sql.NullString        `json:"previous_vendor_history"`
+	CompetitiveStrengths    sql.NullString        `json:"competitive_strengths"`
+	CompetitiveWeaknesses   sql.NullString        `json:"competitive_weaknesses"`
+	PricingExpectations     sql.NullString        `json:"pricing_expectations"`
+	FeatureComparisonMatrix pqtype.NullRawMessage `json:"feature_comparison_matrix"`
+	VendorSelectionCriteria sql.NullString        `json:"vendor_selection_criteria"`
+	CriteriaWeighting       pqtype.NullRawMessage `json:"criteria_weighting"`
+	EvaluationProcess       sql.NullString        `json:"evaluation_process"`
+	ReferenceRequirements   sql.NullString        `json:"reference_requirements"`
+	ProofOfConceptNeeds     sql.NullString        `json:"proof_of_concept_needs"`
+	PilotProgramScope       sql.NullString        `json:"pilot_program_scope"`
+	FinalPresentationFormat sql.NullString        `json:"final_presentation_format"`
+	DecisionTimeline        sql.NullTime          `json:"decision_timeline"`
+	CreatedAt               sql.NullTime          `json:"created_at"`
+	UpdatedAt               sql.NullTime          `json:"updated_at"`
 }
 
 type Contact struct {
@@ -228,6 +430,28 @@ type ContactNews struct {
 	CreatedAt     sql.NullTime   `json:"created_at"`
 }
 
+type CurrentStateAssessment struct {
+	ID                          uuid.UUID      `json:"id"`
+	BriefID                     uuid.NullUUID  `json:"brief_id"`
+	CurrentSolutionProvider     sql.NullString `json:"current_solution_provider"`
+	CurrentSolutionSatisfaction sql.NullInt32  `json:"current_solution_satisfaction"`
+	SpecificPainPoints          sql.NullString `json:"specific_pain_points"`
+	WorkaroundSolutions         sql.NullString `json:"workaround_solutions"`
+	CostOfStatusQuo             sql.NullString `json:"cost_of_status_quo"`
+	SwitchingBarriers           sql.NullString `json:"switching_barriers"`
+	ContractEndDates            sql.NullTime   `json:"contract_end_dates"`
+	RenewalTiming               sql.NullString `json:"renewal_timing"`
+	VendorRelationshipHealth    sql.NullString `json:"vendor_relationship_health"`
+	SupportSatisfaction         sql.NullString `json:"support_satisfaction"`
+	FunctionalityGaps           sql.NullString `json:"functionality_gaps"`
+	PerformanceIssues           sql.NullString `json:"performance_issues"`
+	ScalabilityConstraints      sql.NullString `json:"scalability_constraints"`
+	IntegrationChallenges       sql.NullString `json:"integration_challenges"`
+	UserAdoptionIssues          sql.NullString `json:"user_adoption_issues"`
+	CreatedAt                   sql.NullTime   `json:"created_at"`
+	UpdatedAt                   sql.NullTime   `json:"updated_at"`
+}
+
 type CustomerNeed struct {
 	NeedID          int32        `json:"need_id"`
 	SalesProcessID  int32        `json:"sales_process_id"`
@@ -242,6 +466,49 @@ type Datasource struct {
 	FileData     []byte         `json:"file_data"`
 	FileName     sql.NullString `json:"file_name"`
 	CreatedAt    sql.NullTime   `json:"created_at"`
+}
+
+type FinancialProcurement struct {
+	ID                            uuid.UUID      `json:"id"`
+	BriefID                       uuid.NullUUID  `json:"brief_id"`
+	TotalAvailableBudget          sql.NullString `json:"total_available_budget"`
+	BudgetSource                  sql.NullString `json:"budget_source"`
+	BudgetApprovalWorkflow        sql.NullString `json:"budget_approval_workflow"`
+	ProcurementProcess            sql.NullString `json:"procurement_process"`
+	PurchasingPolicies            sql.NullString `json:"purchasing_policies"`
+	PaymentTermsConstraints       sql.NullString `json:"payment_terms_constraints"`
+	FinancialApprovalLevels       sql.NullString `json:"financial_approval_levels"`
+	BudgetCycleTiming             sql.NullString `json:"budget_cycle_timing"`
+	CostJustificationRequirements sql.NullString `json:"cost_justification_requirements"`
+	RoiCalculationMethod          sql.NullString `json:"roi_calculation_method"`
+	PaybackPeriodExpectations     sql.NullString `json:"payback_period_expectations"`
+	FinancingOptions              sql.NullString `json:"financing_options"`
+	ContractTermsRequirements     sql.NullString `json:"contract_terms_requirements"`
+	LegalReviewProcess            sql.NullString `json:"legal_review_process"`
+	InsuranceRequirements         sql.NullString `json:"insurance_requirements"`
+	CreatedAt                     sql.NullTime   `json:"created_at"`
+	UpdatedAt                     sql.NullTime   `json:"updated_at"`
+}
+
+type GroundTruth struct {
+	ID              uuid.UUID      `json:"id"`
+	MasterBriefID   uuid.NullUUID  `json:"master_brief_id"`
+	FieldName       sql.NullString `json:"field_name"`
+	FieldValue      sql.NullString `json:"field_value"`
+	ConfidenceScore sql.NullString `json:"confidence_score"`
+	SourceBriefIds  []uuid.UUID    `json:"source_brief_ids"`
+	LastUpdated     sql.NullTime   `json:"last_updated"`
+}
+
+type MasterBrief struct {
+	ID               uuid.UUID     `json:"id"`
+	CognitoSub       string        `json:"cognito_sub"`
+	CompanyID        sql.NullInt32 `json:"company_id"`
+	ContactID        sql.NullInt32 `json:"contact_id"`
+	CompanyReference string        `json:"company_reference"`
+	ContactReference string        `json:"contact_reference"`
+	CreatedAt        sql.NullTime  `json:"created_at"`
+	UpdatedAt        sql.NullTime  `json:"updated_at"`
 }
 
 type Meeting struct {
@@ -286,6 +553,28 @@ type ProjectDatasource struct {
 	DatasourceID int32 `json:"datasource_id"`
 }
 
+type ProjectRequirement struct {
+	ID                       uuid.UUID      `json:"id"`
+	BriefID                  uuid.NullUUID  `json:"brief_id"`
+	ProjectScope             sql.NullString `json:"project_scope"`
+	SuccessCriteria          sql.NullString `json:"success_criteria"`
+	ImplementationTimeline   sql.NullString `json:"implementation_timeline"`
+	ResourceAllocation       sql.NullString `json:"resource_allocation"`
+	ProjectTeamStructure     sql.NullString `json:"project_team_structure"`
+	ChangeManagementApproach sql.NullString `json:"change_management_approach"`
+	TrainingRequirements     sql.NullString `json:"training_requirements"`
+	RolloutStrategy          sql.NullString `json:"rollout_strategy"`
+	PilotPhaseDesign         sql.NullString `json:"pilot_phase_design"`
+	RiskMitigationPlan       sql.NullString `json:"risk_mitigation_plan"`
+	CommunicationPlan        sql.NullString `json:"communication_plan"`
+	StakeholderEngagement    sql.NullString `json:"stakeholder_engagement"`
+	PerformanceMetrics       sql.NullString `json:"performance_metrics"`
+	GovernanceStructure      sql.NullString `json:"governance_structure"`
+	EscalationProcedures     sql.NullString `json:"escalation_procedures"`
+	CreatedAt                sql.NullTime   `json:"created_at"`
+	UpdatedAt                sql.NullTime   `json:"updated_at"`
+}
+
 type PropositionDraft struct {
 	DraftID        int32          `json:"draft_id"`
 	SalesProcessID int32          `json:"sales_process_id"`
@@ -306,9 +595,54 @@ type SalesProcess struct {
 	CognitoSub           sql.NullString `json:"cognito_sub"`
 }
 
+type SalesProcessBrief struct {
+	SalesProcessID int32        `json:"sales_process_id"`
+	MasterBriefID  uuid.UUID    `json:"master_brief_id"`
+	CreatedAt      sql.NullTime `json:"created_at"`
+}
+
 type SalesProcessProject struct {
 	SalesProcessID int32 `json:"sales_process_id"`
 	ProjectID      int32 `json:"project_id"`
+}
+
+type SalesProcessTracking struct {
+	ID                    uuid.UUID      `json:"id"`
+	BriefID               uuid.NullUUID  `json:"brief_id"`
+	LeadSource            sql.NullString `json:"lead_source"`
+	OpportunityStage      sql.NullString `json:"opportunity_stage"`
+	ProbabilityPercentage sql.NullInt32  `json:"probability_percentage"`
+	WeightedValue         sql.NullString `json:"weighted_value"`
+	NextActionRequired    sql.NullString `json:"next_action_required"`
+	KeyMilestones         sql.NullString `json:"key_milestones"`
+	SalesVelocity         sql.NullString `json:"sales_velocity"`
+	DealMomentum          sql.NullString `json:"deal_momentum"`
+	CompetitivePosition   sql.NullString `json:"competitive_position"`
+	WinProbabilityFactors sql.NullString `json:"win_probability_factors"`
+	CreatedAt             sql.NullTime   `json:"created_at"`
+	UpdatedAt             sql.NullTime   `json:"updated_at"`
+}
+
+type StrategicContext struct {
+	ID                       uuid.UUID      `json:"id"`
+	BriefID                  uuid.NullUUID  `json:"brief_id"`
+	BusinessStrategy         sql.NullString `json:"business_strategy"`
+	StrategicInitiatives     sql.NullString `json:"strategic_initiatives"`
+	QuarterlyPriorities      sql.NullString `json:"quarterly_priorities"`
+	AnnualGoals              sql.NullString `json:"annual_goals"`
+	TransformationAgenda     sql.NullString `json:"transformation_agenda"`
+	DigitalMaturity          sql.NullString `json:"digital_maturity"`
+	InnovationFocus          sql.NullString `json:"innovation_focus"`
+	OperationalChallenges    sql.NullString `json:"operational_challenges"`
+	CostReductionPressures   sql.NullString `json:"cost_reduction_pressures"`
+	RevenueGrowthTargets     sql.NullString `json:"revenue_growth_targets"`
+	EfficiencyMandates       sql.NullString `json:"efficiency_mandates"`
+	ComplianceDrivers        sql.NullString `json:"compliance_drivers"`
+	RiskManagementPriorities sql.NullString `json:"risk_management_priorities"`
+	SustainabilityGoals      sql.NullString `json:"sustainability_goals"`
+	TechnologyRoadmap        sql.NullString `json:"technology_roadmap"`
+	CreatedAt                sql.NullTime   `json:"created_at"`
+	UpdatedAt                sql.NullTime   `json:"updated_at"`
 }
 
 type Task struct {
@@ -320,6 +654,28 @@ type Task struct {
 	DueDate        sql.NullTime   `json:"due_date"`
 	CreatedAt      sql.NullTime   `json:"created_at"`
 	UpdatedAt      sql.NullTime   `json:"updated_at"`
+}
+
+type TechnicalIntegration struct {
+	ID                        uuid.UUID      `json:"id"`
+	BriefID                   uuid.NullUUID  `json:"brief_id"`
+	TechnicalArchitecture     sql.NullString `json:"technical_architecture"`
+	SecurityRequirements      sql.NullString `json:"security_requirements"`
+	ComplianceStandards       sql.NullString `json:"compliance_standards"`
+	IntegrationPoints         sql.NullString `json:"integration_points"`
+	DataMigrationScope        sql.NullString `json:"data_migration_scope"`
+	CustomizationNeeds        sql.NullString `json:"customization_needs"`
+	ScalabilityRequirements   sql.NullString `json:"scalability_requirements"`
+	PerformanceBenchmarks     sql.NullString `json:"performance_benchmarks"`
+	DisasterRecoveryNeeds     sql.NullString `json:"disaster_recovery_needs"`
+	BackupRequirements        sql.NullString `json:"backup_requirements"`
+	AccessControlRequirements sql.NullString `json:"access_control_requirements"`
+	AuditTrailNeeds           sql.NullString `json:"audit_trail_needs"`
+	ReportingCapabilities     sql.NullString `json:"reporting_capabilities"`
+	ApiRequirements           sql.NullString `json:"api_requirements"`
+	MobileAccessNeeds         sql.NullString `json:"mobile_access_needs"`
+	CreatedAt                 sql.NullTime   `json:"created_at"`
+	UpdatedAt                 sql.NullTime   `json:"updated_at"`
 }
 
 type User struct {
